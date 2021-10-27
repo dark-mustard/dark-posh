@@ -18,6 +18,8 @@ Import-Module GPoSh.Logging
             CompleteTest
             Write-Host "FAILURE" -BackgroundColor Red -ForegroundColor White
         }
+        $TMPDir = ("{0}\logtmp{1}" -f $env:tmp, (Get-Date).ToString("yyyyMMdd")) 
+        $LogAll = ("{0}\DailyScriptLog.log" -f $TMPDir, (Get-Date).ToString("yyyyMMdd"))
         if(Start-GPLog) { Success } else { Failure }
         if(Start-GPLog -EnableDebug) { Success } else { Failure }
         if(Start-GPLog -EnableVerbose) { Success } else { Failure }

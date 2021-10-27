@@ -13,8 +13,8 @@
     # Remove when module is unloaded
     $ExecutionContext.SessionState.Module.OnRemove = {
         Write-Host "****************** MODULE UNLOADING ******************" -ForegroundColor White -BackgroundColor Red
-        Remove-Variable -Scope Script -Visibility $VariableVisibility -Name "ModuleIdentifier"
-        Remove-Variable -Scope Script -Visibility $VariableVisibility -Name "GPLogSessions"
+        Remove-Variable -Scope Script -Name "ModuleIdentifier"
+        Remove-Variable -Scope Script -Name "GPLogSessions"
     }
 
 #endregion
@@ -373,16 +373,14 @@
                 if($IncludeTranscript){
                     try{
                         $Log_DEBUG = $PSCommandPath.Replace(".psm1", "_DEBUG.log").Replace(".ps1", "_DEBUG.log")
-                        Add-GPLogToSession -LogName "GPLog_DEBUG" -FilePath "$Log_DEBUG" 
+                        Add-GPLogToSession -LogName "GPLog_DEBUG" -FilePath $Log_DEBUG
                         try{
-                            Stop-Transcript | Out-Null
+                            Stop-Transcript -WarningAction "SilentlyContinue"  -ErrorAction "SilentlyContinue" | Out-Null
                         }catch{
-                            $script:TranscriptStarted = $false
-                            New-GPLogMessage -Message $_ -LogMessageLevel Warning
+                            #New-GPLogMessage -Message $_ -LogMessageLevel Warning
                         }
-                        Start-Transcript -Path $Log_DEBUG -Force | Out-Null
+                        Start-Transcript -Path $Log_DEBUG -Append:$false -Force:$true | Out-Null
                     } catch {
-                        $script:TranscriptStarted = $false
                         New-GPLogMessage -Message $_ -LogMessageLevel Error
                         $Success = $false
                     }
