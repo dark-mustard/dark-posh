@@ -216,7 +216,8 @@
                 $LogOutputMessageText = $LogOutputMessageLines -join [Environment]::NewLine
                 if($null -ne $script:GPLogSessionID){
                     $script:GPLogSessions[$script:GPLogSessionID].LogList.Values | Where-Object { $_.LogName -notin @("GPLog_DEBUG") } | ForEach-Object { 
-                        $LogOutputMessageText | Out-File $_.FilePath -Append:$($_.AppendBehavior) -Force
+                        #$LogOutputMessageText | Out-File $_.FilePath -Append:$($_.AppendBehavior) -Force
+                        $LogOutputMessageText | Out-File $_.FilePath -Append:$true -Force
                     }
                 }
             }
@@ -232,30 +233,73 @@
                 [Parameter(Mandatory=$true)]
                 [ValidateNotNull()]
                     [String] $LogName,
-                [Parameter(Mandatory=$false)]             
+                [Parameter(Mandatory=$false)]
                     [String] $FilePath,
                 [Parameter(Mandatory=$false)]
                     [Switch] $AppendOnly
             )
+            $Success = $false
 
-            # Skip items with no file path
+            # Skip items with no file path and 
             if(-Not [String]::IsNullOrWhiteSpace($FilePath)) {
-                # Create root folder if it doesn't already exist
-                $LogDir = (Split-Path $FilePath)
-                if(-Not (Test-Path (Split-Path $LogDir))){
-                    New-Item -ItemType Directory -Path $LogDir | Out-Null
-                }   
+                # Skip the transcript file from being created manually
+                if($FilePath -notlike "*_DEBUG.log"){
+                    try{
+                        #region Initialize file on disk
+                            $FileExists = Test-Path $FilePath
+                            $Overwrite  = (-Not $AppendOnly)
+                            $CreateFile = (-Not $FileExists)
+                            if($FileExists){
+                                # Overwrite or append any existing files with the same name
+                                if($Overwrite){
+                                    Remove-Item -Path $FilePath -Force | Out-Null
+                                    $CreateFile = $true
+                                }
+                            } else {
+                                # Create root folder if it doesn't already exist
+                                $LogDir = (Split-Path $FilePath)
+                                if(-Not (Test-Path $LogDir)){
+                                    New-Item -ItemType Directory -Path $LogDir | Out-Null
+                                }
+                                $CreateFile = $true
+                            }
+                            if($CreateFile){
+                                # Create the file on disk.
+                                New-Item -ItemType File -Path $FilePath -Force | Out-Null
+                            } else {
+                                # Append a seperator to the file.
+                                $SeperatorLines=@(
+                                        ""
+                                        "-------------------------------------"
+                                        ""
+                                    )
+                                $SeperatorLines | %{
+                                    $_ | Out-File $FilePath -Force -Append #| Out-Null
+                                }
+                            }
+                            
+                        #endregion
+                        #region Add object to session list
+                            # Add to session list
+                            $LogObject=[PSCustomObject]@{
+                                LogName           = $LogName
+                                FilePath          = $FilePath
+                                FileDirectory     = $LogDir
+                                AppendBehavior    = $AppendOnly
+                                OverwriteBehavior = (-Not $AppendOnly)
+                            }
+                            $script:GPLogSessions[$script:GPLogSessionID].LogList.Add($LogName, $LogObject)
+                        #endregion
 
-                # Add to session list
-                $LogObject=[PSCustomObject]@{
-                    LogName           = $LogName
-                    FilePath          = $FilePath
-                    FileDirectory     = $LogDir
-                    AppendBehavior    = $AppendOnly
-                    OverwriteBehavior = (-Not $AppendOnly)
+                        $Success = $true
+                    } catch {
+                        $Success = $false
+                        throw $_
+                    }
                 }
-                $script:GPLogSessions[$script:GPLogSessionID].LogList.Add($LogName, $LogObject)
             }
+
+            #return $Success
         }
         function Start-GPLog {
             <#
@@ -310,7 +354,7 @@
                 [Parameter(Mandatory=$false, ParameterSetName="NoTranscript")]
                     [System.String] $LogFileNamePrefix = $null,
                 
-                <#
+                #<#
                 [Parameter(Mandatory=$true, ParameterSetName="Transcript")]
                 [Parameter(Mandatory=$true, ParameterSetName="Transcript_All")]
                     [Switch] $LogAll,
@@ -318,12 +362,14 @@
                 [Parameter(Mandatory=$true, ParameterSetName="Transcript_Last")]
                     [Switch] $LogLast,
                 #>
+                <#
                 [Parameter(Mandatory=$true, ParameterSetName="Transcript")]
                 [Parameter(Mandatory=$true, ParameterSetName="Transcript_All")]
                     [System.String] $LogAll,
                 [Parameter(Mandatory=$true, ParameterSetName="Transcript")]
                 [Parameter(Mandatory=$true, ParameterSetName="Transcript_Last")]
                     [System.String] $LogLast,
+                #>
                 [Parameter(Mandatory=$false, ParameterSetName="Transcript")]
                 [Parameter(Mandatory=$false, ParameterSetName="Transcript_All")]
                 [Parameter(Mandatory=$false, ParameterSetName="Transcript_Last")]
@@ -360,7 +406,9 @@
             #[String] $LogPath_DEBUG = $PSCommandPath.Replace(".psm1", "_DEBUG.log").Replace(".ps1", "_DEBUG.log")
             #[String] $LogPath_ALL   = $LogAll
             #[String] $LogPath_LAST  = $LogLast
-            $ScriptFilePathPrefix=Join-Path $LogOutputDirectory $LogFileNamePrefix
+            $ScriptFilePathPrefix=(Join-Path $LogOutputDirectory $LogFileNamePrefix)
+            $ScriptFilePathPrefix=$ScriptFilePathPrefix.Substring(0, $ScriptFilePathPrefix.LastIndexOf("."))
+            #$($ScriptFilePathPrefix.Substring(0, $ScriptName.IndexOf((".{0}" -f @($ScriptFilePathPrefix.Split(".") | Select -Last 1)[0]))))
             [String] $LogPath_DEBUG = "{0}_DEBUG.log" -f $ScriptFilePathPrefix
             [String] $LogPath_ALL   = "{0}.log" -f $ScriptFilePathPrefix
             [String] $LogPath_LAST  = "{0}_LAST.log" -f $ScriptFilePathPrefix
@@ -458,21 +506,14 @@
             New-GPLogMessage -MessagePrefixAddition "" -Message " ************************"
             
 
-            if(($script:GPLogSessions[$script:GPLogSessionID].LogList | Where-Object { $_.LogName -eq "GPLog_DEBUG" }).Count -gt 0){
-            #if($script:TranscriptStarted) {
+            if(@($script:GPLogSessions[$script:GPLogSessionID].LogList.Values | Where-Object { $_.LogName -eq "GPLog_DEBUG" }).Count -gt 0){
                 # Close transcript (if in use)
                 Stop-Transcript | Out-Null
-
-                ## Generate output log file list if log files were saved
-                #$LogFileList = @()
-                #if(-Not [String]::IsNullOrWhiteSpace($GPLog_All)){
-                #    $LogFileList += $GPLog_All
-                #}
-                #if(-Not [String]::IsNullOrWhiteSpace($GPLog_Last)){
-                #    $LogFileList += $GPLog_Last
-                #}
             }
 
+            
+            $LogFileList = @($script:GPLogSessions[$script:GPLogSessionID].LogList.Values.FilePath)
+            $ReturnFileList=$LogFileList -join ","
             
         
             # Remove session from session list and cleanup resources

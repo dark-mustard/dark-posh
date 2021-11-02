@@ -45,17 +45,18 @@ Import-Module GPoSh.Logging
         if(Start-GPLog -LogAll $LogAll -LogLast ("{0}\ScriptRun_{1}.log" -f $TMPDir, "2.3.2") -EnableDebug -EnableVerbose -IncludeTranscript) { Success } else { Failure }
     }
     function Test-LogFileCreation{
-        Write-Host "***********************************"
-        Write-Host "*** FUNCTION INVOCATION DETAILS ***"
-        Write-Host "***********************************"
-        $MyInvocation
-        Write-Host "***********************************"
-        $ScriptDir     = $MyInvocation.PSScriptRoot
-        $ScriptName    = (Split-Path $MyInvocation.PSCommandPath -Leaf)
-        $LogNamePrefix = $($ScriptName.Substring(0, $ScriptName.IndexOf((".{0}" -f @($ScriptName.Split(".") | Select -Last 1)[0]))))
-        $LogLast       = ("{0}\{1}_LAST.log" -f $ScriptDir, $LogNamePrefix)
-        $LogAll        = ("{0}\{1}.log" -f $ScriptDir, $LogNamePrefix)
-        Start-GPLog -LogAll $LogAll -LogLast $LogLast -EnableDebug -EnableVerbose -IncludeTranscript
+        #Write-Host "***********************************"
+        #Write-Host "*** FUNCTION INVOCATION DETAILS ***"
+        #Write-Host "***********************************"
+        #$MyInvocation
+        #Write-Host "***********************************"
+        #$ScriptDir     = $MyInvocation.PSScriptRoot
+        #$ScriptName    = (Split-Path $MyInvocation.PSCommandPath -Leaf)
+        #$LogNamePrefix = $($ScriptName.Substring(0, $ScriptName.IndexOf((".{0}" -f @($ScriptName.Split(".") | Select -Last 1)[0]))))
+        #$LogLast       = ("{0}\{1}_LAST.log" -f $ScriptDir, $LogNamePrefix)
+        #$LogAll        = ("{0}\{1}.log" -f $ScriptDir, $LogNamePrefix)
+        #Start-GPLog -LogAll $LogAll -LogLast $LogLast -EnableDebug -EnableVerbose -IncludeTranscript
+        Start-GPLog -LogAll -LogLast -EnableDebug -EnableVerbose -IncludeTranscript
         Stop-GPLog
     }
 #endregion
