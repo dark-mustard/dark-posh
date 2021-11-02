@@ -347,29 +347,17 @@
                 [Parameter(Mandatory=$false, ParameterSetName="Transcript_Last")]
                 [Parameter(Mandatory=$false, ParameterSetName="NoTranscript")]
                     [System.String] $LogOutputDirectory = $null,
-                
                 [Parameter(Mandatory=$false, ParameterSetName="Transcript")]
                 [Parameter(Mandatory=$false, ParameterSetName="Transcript_All")]
                 [Parameter(Mandatory=$false, ParameterSetName="Transcript_Last")]
                 [Parameter(Mandatory=$false, ParameterSetName="NoTranscript")]
                     [System.String] $LogFileNamePrefix = $null,
-                
-                #<#
                 [Parameter(Mandatory=$true, ParameterSetName="Transcript")]
                 [Parameter(Mandatory=$true, ParameterSetName="Transcript_All")]
                     [Switch] $LogAll,
                 [Parameter(Mandatory=$true, ParameterSetName="Transcript")]
                 [Parameter(Mandatory=$true, ParameterSetName="Transcript_Last")]
                     [Switch] $LogLast,
-                #>
-                <#
-                [Parameter(Mandatory=$true, ParameterSetName="Transcript")]
-                [Parameter(Mandatory=$true, ParameterSetName="Transcript_All")]
-                    [System.String] $LogAll,
-                [Parameter(Mandatory=$true, ParameterSetName="Transcript")]
-                [Parameter(Mandatory=$true, ParameterSetName="Transcript_Last")]
-                    [System.String] $LogLast,
-                #>
                 [Parameter(Mandatory=$false, ParameterSetName="Transcript")]
                 [Parameter(Mandatory=$false, ParameterSetName="Transcript_All")]
                 [Parameter(Mandatory=$false, ParameterSetName="Transcript_Last")]

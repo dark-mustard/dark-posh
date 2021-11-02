@@ -18,31 +18,48 @@ Import-Module GPoSh.Logging
             CompleteTest
             Write-Host "FAILURE" -BackgroundColor Red -ForegroundColor White
         }
-        $TMPDir = ("{0}\logtmp{1}" -f $env:tmp, (Get-Date).ToString("yyyyMMdd")) 
-        $LogAll = ("{0}\DailyScriptLog.log" -f $TMPDir, (Get-Date).ToString("yyyyMMdd"))
+        $TMPDir = ("{0}\logtmp{1}" -f $PSScriptRoot, (Get-Date).ToString("yyyyMMdd")) 
+        $FilePrefix = "CUSTOM_PREFIX_"
         if(Start-GPLog) { Success } else { Failure }
+        if(Start-GPLog -LogOutputDirectory $TMPDir) { Success } else { Failure }
+        if(Start-GPLog -LogFileNamePrefix $FilePrefix) { Success } else { Failure }
         if(Start-GPLog -EnableDebug) { Success } else { Failure }
         if(Start-GPLog -EnableVerbose) { Success } else { Failure }
+        if(Start-GPLog -LogLast) { Success } else { Failure }
+        if(Start-GPLog -LogAll) { Success } else { Failure }
+        if(Start-GPLog -LogAll -LogLast) { Success } else { Failure }
+        if(Start-GPLog -LogLast -EnableVerbose) { Success } else { Failure }
+        #---
+        if(Start-GPLog -EnableDebug -LogOutputDirectory $TMPDir) { Success } else { Failure }
+        if(Start-GPLog -EnableDebug -LogFileNamePrefix $FilePrefix) { Success } else { Failure }
         if(Start-GPLog -EnableDebug -EnableVerbose) { Success } else { Failure }
+        if(Start-GPLog -LogLast -EnableDebug) { Success } else { Failure }
+        if(Start-GPLog -LogLast -EnableVerbose) { Success } else { Failure }
+        if(Start-GPLog -LogAll -EnableDebug) { Success } else { Failure }
+        if(Start-GPLog -LogAll -EnableVerbose) { Success } else { Failure }
+        #---
+        if(Start-GPLog -EnableDebug -LogOutputDirectory $TMPDir -LogFileNamePrefix $FilePrefix) { Success } else { Failure }
+        if(Start-GPLog -EnableDebug -EnableVerbose -LogOutputDirectory $TMPDir) { Success } else { Failure }
+        if(Start-GPLog -EnableDebug -EnableVerbose -LogFileNamePrefix $FilePrefix) { Success } else { Failure }
         if(Start-GPLog -EnableDebug -EnableVerbose -IncludeTranscript) { Success } else { Failure }
-        if(Start-GPLog -LogLast ("{0}\ScriptRun_{1}.log" -f $TMPDir, "1.1.1")) { Success } else { Failure }
-        if(Start-GPLog -LogLast ("{0}\ScriptRun_{1}.log" -f $TMPDir, "1.2.1") -EnableDebug) { Success } else { Failure }
-        if(Start-GPLog -LogLast ("{0}\ScriptRun_{1}.log" -f $TMPDir, "1.2.2") -EnableDebug -IncludeTranscript) { Success } else { Failure }
-        if(Start-GPLog -LogLast ("{0}\ScriptRun_{1}.log" -f $TMPDir, "1.2.3") -EnableVerbose) { Success } else { Failure }
-        if(Start-GPLog -LogLast ("{0}\ScriptRun_{1}.log" -f $TMPDir, "1.2.4") -EnableVerbose -IncludeTranscript) { Success } else { Failure }
-        if(Start-GPLog -LogLast ("{0}\ScriptRun_{1}.log" -f $TMPDir, "1.3.1") -EnableDebug -EnableVerbose) { Success } else { Failure }
-        if(Start-GPLog -LogLast ("{0}\ScriptRun_{1}.log" -f $TMPDir, "1.3.2") -EnableDebug -EnableVerbose -IncludeTranscript) { Success } else { Failure }
-        if(Start-GPLog -LogAll $LogAll) { Success } else { Failure }
-        if(Start-GPLog -LogAll $LogAll -EnableDebug) { Success } else { Failure }
-        if(Start-GPLog -LogAll $LogAll -EnableVerbose) { Success } else { Failure }
-        if(Start-GPLog -LogAll $LogAll -EnableDebug -EnableVerbose) { Success } else { Failure }
-        if(Start-GPLog -LogAll $LogAll -LogLast ("{0}\ScriptRun_{1}.log" -f $TMPDir, "2.1.1")) { Success } else { Failure }
-        if(Start-GPLog -LogAll $LogAll -LogLast ("{0}\ScriptRun_{1}.log" -f $TMPDir, "2.2.1") -EnableDebug) { Success } else { Failure }
-        if(Start-GPLog -LogAll $LogAll -LogLast ("{0}\ScriptRun_{1}.log" -f $TMPDir, "2.2.2") -EnableDebug -IncludeTranscript) { Success } else { Failure }
-        if(Start-GPLog -LogAll $LogAll -LogLast ("{0}\ScriptRun_{1}.log" -f $TMPDir, "2.2.3") -EnableVerbose) { Success } else { Failure }
-        if(Start-GPLog -LogAll $LogAll -LogLast ("{0}\ScriptRun_{1}.log" -f $TMPDir, "2.2.4") -EnableVerbose -IncludeTranscript) { Success } else { Failure }
-        if(Start-GPLog -LogAll $LogAll -LogLast ("{0}\ScriptRun_{1}.log" -f $TMPDir, "2.3.1") -EnableDebug -EnableVerbose) { Success } else { Failure }
-        if(Start-GPLog -LogAll $LogAll -LogLast ("{0}\ScriptRun_{1}.log" -f $TMPDir, "2.3.2") -EnableDebug -EnableVerbose -IncludeTranscript) { Success } else { Failure }
+        if(Start-GPLog -LogLast -EnableDebug -IncludeTranscript) { Success } else { Failure }
+        if(Start-GPLog -LogAll -EnableDebug -EnableVerbose) { Success } else { Failure }
+        if(Start-GPLog -LogAll -LogLast -EnableDebug) { Success } else { Failure }
+        if(Start-GPLog -LogAll -LogLast -EnableVerbose) { Success } else { Failure }
+        if(Start-GPLog -LogLast -EnableVerbose -IncludeTranscript) { Success } else { Failure }
+        if(Start-GPLog -LogLast -EnableDebug -EnableVerbose) { Success } else { Failure }
+        #---
+        if(Start-GPLog -EnableDebug -EnableVerbose -LogOutputDirectory $TMPDir -LogFileNamePrefix $FilePrefix) { Success } else { Failure }
+        if(Start-GPLog -EnableDebug -EnableVerbose -IncludeTranscript -LogOutputDirectory $TMPDir) { Success } else { Failure }
+        if(Start-GPLog -EnableDebug -EnableVerbose -IncludeTranscript -LogFileNamePrefix $FilePrefix) { Success } else { Failure }
+        if(Start-GPLog -LogAll -LogLast -EnableDebug -IncludeTranscript) { Success } else { Failure }
+        if(Start-GPLog -LogAll -LogLast -EnableVerbose -IncludeTranscript) { Success } else { Failure }
+        if(Start-GPLog -LogAll -LogLast -EnableDebug -EnableVerbose) { Success } else { Failure }
+        if(Start-GPLog -LogLast -EnableDebug -EnableVerbose -IncludeTranscript) { Success } else { Failure }
+        if(Start-GPLog -LogAll -LogLast -EnableDebug -EnableVerbose -IncludeTranscript) { Success } else { Failure }
+        #---
+        if(Start-GPLog -EnableDebug -EnableVerbose -IncludeTranscript -LogOutputDirectory $TMPDir -LogFileNamePrefix $FilePrefix) { Success } else { Failure }
+        #---
     }
     function Test-LogFileCreation{
         #Write-Host "***********************************"
