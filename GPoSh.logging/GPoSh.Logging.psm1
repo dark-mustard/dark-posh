@@ -1,20 +1,17 @@
 ﻿#region Initialize module instance-specific variables
-    $VariableVisibility = "Private"
-    #$VariableVisibility = "Public"
-
-    #Remove-Variable -Scope Script -Name "ModuleIdentifier" -ErrorAction SilentlyContinue
-    #Remove-Variable -Scope Script -Name "GPLogSessions" -ErrorAction SilentlyContinue
-    #Remove-Variable -Scope Script -Name "GPLogSessioinID" -ErrorAction SilentlyContinue
 
     # Generate id value unique to module import context
-    New-Variable -Scope Script -Visibility $VariableVisibility -Name "ModuleIdentifier" -Value $((New-Guid).Guid.Replace("-", ""))
-    New-Variable -Scope Script -Visibility $VariableVisibility -Name "GPLogSessions" -Value @{}
+    #New-Variable -Scope Script -Visibility Private -Name "VariableVisibility" -Value "Private"
+        New-Variable -Scope Script -Visibility Private -Name "VariableVisibility" -Value "Public"
+    New-Variable -Scope Script -Visibility $script:VariableVisibility -Name "ModuleIdentifier" -Value $((New-Guid).Guid.Replace("-", ""))
+    New-Variable -Scope Script -Visibility $script:VariableVisibility -Name "GPLogSessions" -Value @{}
 
     # Remove when module is unloaded
     $ExecutionContext.SessionState.Module.OnRemove = {
         Write-Host "****************** MODULE UNLOADING ******************" -ForegroundColor White -BackgroundColor Red
-        Remove-Variable -Scope Script -Name "ModuleIdentifier"
         Remove-Variable -Scope Script -Name "GPLogSessions"
+        Remove-Variable -Scope Script -Name "ModuleIdentifier"
+        Remove-Variable -Scope Script -Name "VariableVisibility"
     }
 
 #endregion
@@ -217,12 +214,11 @@
 
                 # Output to log files (if in use)
                 $LogOutputMessageText = $LogOutputMessageLines -join [Environment]::NewLine
-                    if($null -ne $script:GPLogSessioinID){
-                    $script:GPLogSessions[$script:GPLogSessioinID].LogList | Where-Object { $_.LogName -in @("GPLog_All", "GPLog_Last")  } | ForEach-Object { 
+                if($null -ne $script:GPLogSessionID){
+                    $script:GPLogSessions[$script:GPLogSessionID].LogList.Values | Where-Object { $_.LogName -notin @("GPLog_DEBUG") } | ForEach-Object { 
                         $LogOutputMessageText | Out-File $_.FilePath -Append:$($_.AppendBehavior) -Force
                     }
                 }
-                #$script:GPLogSessions[$script:GPLogSessioinID].LogList | Where-Object { $_.LogName -eq "GPLog_Last"  } | ForEach-Object { $_ }
             }
         }
     #endregion
@@ -258,7 +254,7 @@
                     AppendBehavior    = $AppendOnly
                     OverwriteBehavior = (-Not $AppendOnly)
                 }
-                $script:GPLogSessions[$script:GPLogSessioinID].LogList.Add($LogName, $LogObject)
+                $script:GPLogSessions[$script:GPLogSessionID].LogList.Add($LogName, $LogObject)
             }
         }
         function Start-GPLog {
@@ -302,13 +298,31 @@
             [CmdletBinding(DefaultParameterSetName='NoInput')]
             [OutputType([Boolean])]
             param(
+                [Parameter(Mandatory=$false, ParameterSetName="Transcript")]
+                [Parameter(Mandatory=$false, ParameterSetName="Transcript_All")]
+                [Parameter(Mandatory=$false, ParameterSetName="Transcript_Last")]
+                [Parameter(Mandatory=$false, ParameterSetName="NoTranscript")]
+                    [System.String] $LogOutputDirectory = $null,
+                
+                [Parameter(Mandatory=$false, ParameterSetName="Transcript")]
+                [Parameter(Mandatory=$false, ParameterSetName="Transcript_All")]
+                [Parameter(Mandatory=$false, ParameterSetName="Transcript_Last")]
+                [Parameter(Mandatory=$false, ParameterSetName="NoTranscript")]
+                    [System.String] $LogFileNamePrefix = $null,
+                
+                <#
                 [Parameter(Mandatory=$true, ParameterSetName="Transcript")]
                 [Parameter(Mandatory=$true, ParameterSetName="Transcript_All")]
-                [ValidateNotNull()]
+                    [Switch] $LogAll,
+                [Parameter(Mandatory=$true, ParameterSetName="Transcript")]
+                [Parameter(Mandatory=$true, ParameterSetName="Transcript_Last")]
+                    [Switch] $LogLast,
+                #>
+                [Parameter(Mandatory=$true, ParameterSetName="Transcript")]
+                [Parameter(Mandatory=$true, ParameterSetName="Transcript_All")]
                     [System.String] $LogAll,
                 [Parameter(Mandatory=$true, ParameterSetName="Transcript")]
                 [Parameter(Mandatory=$true, ParameterSetName="Transcript_Last")]
-                [ValidateNotNull()]
                     [System.String] $LogLast,
                 [Parameter(Mandatory=$false, ParameterSetName="Transcript")]
                 [Parameter(Mandatory=$false, ParameterSetName="Transcript_All")]
@@ -326,12 +340,40 @@
                 [Parameter(Mandatory=$false, ParameterSetName="NoTranscript")]
                     [Switch] $IncludeTranscript
             )
-
-            [Boolean] $Success = $false
+            if([String]::IsNullOrWhiteSpace($local:LogOutputDirectory) -or [String]::IsNullOrWhiteSpace($local:LogFileNamePrefix)){
+                # Retrieve the root call from call stack to generate the default log directory
+                $local:CallStack=@(Get-PSCallStack)
+                $local:RootInvocation=$CallStack[($CallStack.Count - 1)]
+                [String]$local:ScriptFullPath=$RootInvocation.InvocationInfo.MyCommand.Path
+                Write-Host "ScriptPath: $local:ScriptFullPath"
+                if([String]::IsNullOrWhiteSpace($local:LogFileNamePrefix)){
+                    #$LogFileNamePrefix  = $RootInvocation.InvocationInfo.MyCommand.Name
+                    $local:LogFileNamePrefix  = $(Split-Path $local:ScriptFullPath -Leaf)
+                }
+                if([String]::IsNullOrWhiteSpace($LogOutputDirectory)){
+                    #$local:LogOutputDirectory = $(Split-Path $local:RootInvocation.ScriptName)
+                    $local:LogOutputDirectory = $(Split-Path $local:ScriptFullPath)
+                }
+            }
+            
+            [Boolean]$Success       = $false
+            #[String] $LogPath_DEBUG = $PSCommandPath.Replace(".psm1", "_DEBUG.log").Replace(".ps1", "_DEBUG.log")
+            #[String] $LogPath_ALL   = $LogAll
+            #[String] $LogPath_LAST  = $LogLast
+            $ScriptFilePathPrefix=Join-Path $LogOutputDirectory $LogFileNamePrefix
+            [String] $LogPath_DEBUG = "{0}_DEBUG.log" -f $ScriptFilePathPrefix
+            [String] $LogPath_ALL   = "{0}.log" -f $ScriptFilePathPrefix
+            [String] $LogPath_LAST  = "{0}_LAST.log" -f $ScriptFilePathPrefix
 
             #region Generate unique session identifier and add to session list
-                New-Variable -Scope "Script" -Visibility $script:VariableVisibility -Name "GPLogSessioinID" -Value $null
-                New-Variable -Scope "Script" -Visibility $script:VariableVisibility -Name "SessionIndex" -Value 1
+                if(-Not $script:GPLogSessionID){
+                    New-Variable -Scope "Script" -Visibility $script:VariableVisibility -Name "GPLogSessionID" -Value $null
+                }
+                if(-Not $script:SessionIndex){
+                    New-Variable -Scope "Script" -Visibility $script:VariableVisibility -Name "SessionIndex" -Value 1
+                } else {
+                    $script:SessionIndex += 1
+                }
                 #$script:SessionIndex = 1
                 $script:GPLogSessions | 
                     Where-Object { $_.SessionID -like "$($script:ModuleIdentifier)*" } | 
@@ -340,10 +382,11 @@
                                 ForEach-Object {
                                     $script:SessionIndex = $_.SessionIndex
                                 }
-                $script:GPLogSessioinID = "{0}:{1}" -f $script:ModuleIdentifier, $($script:SessionIndex.ToString().PadLeft(3, "0"))
+                $script:GPLogSessionID = "{0}:{1}" -f $script:ModuleIdentifier, $($script:SessionIndex.ToString().PadLeft(3, "0"))
+                Write-Host ("Log Session Identifier: {0}" -f $script:GPLogSessionID)
                 Remove-Variable -Scope "Script" -Name "SessionIndex" | Out-Null 
                 $SessionData=[PSCustomObject]@{
-                    SessionID = $script:GPLogSessioinID
+                    SessionID = $script:GPLogSessionID
                 }
                 $SessionData | Add-Member -MemberType NoteProperty -Name "LogList" -Value @{}
                 $SessionData | Add-Member -MemberType NoteProperty -Name "DebugPrefs" -Value (
@@ -358,7 +401,7 @@
                         Session = if($EnableVerbose) { 'Continue' } else { $global:VerbosePreference }
                     }
                 )
-                $script:GPLogSessions.Add( $script:GPLogSessioinID, $SessionData )
+                $script:GPLogSessions.Add( $script:GPLogSessionID, $SessionData )
             #endregion
 
             # Assume successful from this point on unless error is thrown
@@ -372,22 +415,21 @@
                 # Start transcript if any filepaths were specified
                 if($IncludeTranscript){
                     try{
-                        $Log_DEBUG = $PSCommandPath.Replace(".psm1", "_DEBUG.log").Replace(".ps1", "_DEBUG.log")
-                        Add-GPLogToSession -LogName "GPLog_DEBUG" -FilePath $Log_DEBUG
+                        Add-GPLogToSession -LogName "GPLog_DEBUG" -FilePath $LogPath_DEBUG
                         try{
                             Stop-Transcript -WarningAction "SilentlyContinue"  -ErrorAction "SilentlyContinue" | Out-Null
                         }catch{
                             #New-GPLogMessage -Message $_ -LogMessageLevel Warning
                         }
-                        Start-Transcript -Path $Log_DEBUG -Append:$false -Force:$true | Out-Null
+                        Start-Transcript -Path $LogPath_DEBUG -Append:$false -Force:$true | Out-Null
                     } catch {
                         New-GPLogMessage -Message $_ -LogMessageLevel Error
                         $Success = $false
                     }
                 }
                 if($PSCmdlet.ParameterSetName -like "Transcript*"){
-                    Add-GPLogToSession -LogName "GPLog_All" -FilePath $LogAll -AppendOnly
-                    Add-GPLogToSession -LogName "GPLog_Last" -FilePath $LogLast
+                    Add-GPLogToSession -LogName "GPLog_All"  -FilePath $LogPath_ALL  -AppendOnly
+                    Add-GPLogToSession -LogName "GPLog_Last" -FilePath $LogPath_LAST
                 } 
             } catch {
                 New-GPLogMessage -Message $_ -LogMessageLevel Error
@@ -405,7 +447,7 @@
             [OutputType([String[]])]
             param()
 
-            $SessionData = $script:GPLogSessions[$script:GPLogSessioinID]
+            $SessionData = $script:GPLogSessions[$script:GPLogSessionID]
             [String[]] $ReturnFileList = ($SessionData.LogList | Select-Object FilePath).FilePath
 
             # Set debug / verbose output settings back to original values
@@ -416,7 +458,7 @@
             New-GPLogMessage -MessagePrefixAddition "" -Message " ************************"
             
 
-            if(($script:GPLogSessions[$script:GPLogSessioinID].LogList | Where-Object { $_.LogName -eq "GPLog_DEBUG" }).Count -gt 0){
+            if(($script:GPLogSessions[$script:GPLogSessionID].LogList | Where-Object { $_.LogName -eq "GPLog_DEBUG" }).Count -gt 0){
             #if($script:TranscriptStarted) {
                 # Close transcript (if in use)
                 Stop-Transcript | Out-Null
@@ -434,8 +476,8 @@
             
         
             # Remove session from session list and cleanup resources
-            $script:GPLogSessions.Remove($script:GPLogSessioinID)
-            Remove-Variable -Scope "Script" -Name "GPLogSessioinID" | Out-Null
+            $script:GPLogSessions.Remove($script:GPLogSessionID)
+            Remove-Variable -Scope "Script" -Name "GPLogSessionID" | Out-Null
 
             ## Remove unnecessary variables
             #Remove-Variable -Scope "Script" -Name "GPLog_All"  -ErrorAction "SilentlyContinue"      | Out-Null
