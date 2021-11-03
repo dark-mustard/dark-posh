@@ -239,12 +239,12 @@
                     [Switch] $AppendOnly
             )
             $Success = $false
-
+            
             # Skip items with no file path and 
             if(-Not [String]::IsNullOrWhiteSpace($FilePath)) {
-                # Skip the transcript file from being created manually
-                if($FilePath -notlike "*_DEBUG.log"){
-                    try{
+                try{
+                    # Skip the transcript file from being created manually
+                    if($FilePath -notlike "*_DEBUG.log"){
                         #region Initialize file on disk
                             $FileExists = Test-Path $FilePath
                             $Overwrite  = (-Not $AppendOnly)
@@ -279,26 +279,24 @@
                             }
                             
                         #endregion
-                        #region Add object to session list
-                            # Add to session list
-                            $LogObject=[PSCustomObject]@{
-                                LogName           = $LogName
-                                FilePath          = $FilePath
-                                FileDirectory     = $LogDir
-                                AppendBehavior    = $AppendOnly
-                                OverwriteBehavior = (-Not $AppendOnly)
-                            }
-                            $script:GPLogSessions[$script:GPLogSessionID].LogList.Add($LogName, $LogObject)
-                        #endregion
-
-                        $Success = $true
-                    } catch {
-                        $Success = $false
-                        throw $_
                     }
+                    #region Add object to session list
+                        # Add to session list
+                        $LogObject=[PSCustomObject]@{
+                            LogName           = $LogName
+                            FilePath          = $FilePath
+                            FileDirectory     = $LogDir
+                            AppendBehavior    = $AppendOnly
+                            OverwriteBehavior = (-Not $AppendOnly)
+                        }
+                        $script:GPLogSessions[$script:GPLogSessionID].LogList.Add($LogName, $LogObject)
+                    #endregion
+                    $Success = $true
+                } catch {
+                    $Success = $false
+                    throw $_
                 }
             }
-
             #return $Success
         }
         function Start-GPLog {
