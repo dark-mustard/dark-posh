@@ -3,12 +3,12 @@ Import-Module GPoSh.Logging
 #region Test Functions
     function Test-StartStopGPSession{
         function CompleteTest{
-            New-GPLogMessage -Message "Testing VERBOSE message."       -LogMessageLevel Verbose
-            New-GPLogMessage -Message "Testing DEBUG message."         -LogMessageLevel Debug
-            New-GPLogMessage -Message "Testing INFORMATIONAL message." -LogMessageLevel Information
-            New-GPLogMessage -Message "Testing WARNING message."       -LogMessageLevel Warning
-            New-GPLogMessage -Message "Testing ERROR message."         -LogMessageLevel Error
-            Stop-GPLog
+            New-DarkLogMessage -Message "Testing VERBOSE message."       -MessageLevel Verbose
+            New-DarkLogMessage -Message "Testing DEBUG message."         -MessageLevel Debug
+            New-DarkLogMessage -Message "Testing INFORMATIONAL message." -MessageLevel Information
+            New-DarkLogMessage -Message "Testing WARNING message."       -MessageLevel Warning
+            New-DarkLogMessage -Message "Testing ERROR message."         -MessageLevel Error
+            Stop-DarkSession
         }
         function Success{
             CompleteTest
@@ -20,45 +20,45 @@ Import-Module GPoSh.Logging
         }
         $TMPDir = ("{0}\logtmp{1}" -f $PSScriptRoot, (Get-Date).ToString("yyyyMMdd")) 
         $FilePrefix = "CUSTOM_PREFIX_"
-        if(Start-GPLog) { Success } else { Failure }
-        if(Start-GPLog -LogOutputDirectory $TMPDir) { Success } else { Failure }
-        if(Start-GPLog -LogFileNamePrefix $FilePrefix) { Success } else { Failure }
-        if(Start-GPLog -EnableDebug) { Success } else { Failure }
-        if(Start-GPLog -EnableVerbose) { Success } else { Failure }
-        if(Start-GPLog -LogLast) { Success } else { Failure }
-        if(Start-GPLog -LogAll) { Success } else { Failure }
-        if(Start-GPLog -LogAll -LogLast) { Success } else { Failure }
-        if(Start-GPLog -LogLast -EnableVerbose) { Success } else { Failure }
+        if(Start-DarkSession) { Success } else { Failure }
+        if(Start-DarkSession -LogOutputDirectory $TMPDir) { Success } else { Failure }
+        if(Start-DarkSession -LogFileNamePrefix $FilePrefix) { Success } else { Failure }
+        if(Start-DarkSession -EnableDebug) { Success } else { Failure }
+        if(Start-DarkSession -EnableVerbose) { Success } else { Failure }
+        if(Start-DarkSession -LogLast) { Success } else { Failure }
+        if(Start-DarkSession -LogAll) { Success } else { Failure }
+        if(Start-DarkSession -LogAll -LogLast) { Success } else { Failure }
+        if(Start-DarkSession -LogLast -EnableVerbose) { Success } else { Failure }
         #---
-        if(Start-GPLog -EnableDebug -LogOutputDirectory $TMPDir) { Success } else { Failure }
-        if(Start-GPLog -EnableDebug -LogFileNamePrefix $FilePrefix) { Success } else { Failure }
-        if(Start-GPLog -EnableDebug -EnableVerbose) { Success } else { Failure }
-        if(Start-GPLog -LogLast -EnableDebug) { Success } else { Failure }
-        if(Start-GPLog -LogLast -EnableVerbose) { Success } else { Failure }
-        if(Start-GPLog -LogAll -EnableDebug) { Success } else { Failure }
-        if(Start-GPLog -LogAll -EnableVerbose) { Success } else { Failure }
+        if(Start-DarkSession -EnableDebug -LogOutputDirectory $TMPDir) { Success } else { Failure }
+        if(Start-DarkSession -EnableDebug -LogFileNamePrefix $FilePrefix) { Success } else { Failure }
+        if(Start-DarkSession -EnableDebug -EnableVerbose) { Success } else { Failure }
+        if(Start-DarkSession -LogLast -EnableDebug) { Success } else { Failure }
+        if(Start-DarkSession -LogLast -EnableVerbose) { Success } else { Failure }
+        if(Start-DarkSession -LogAll -EnableDebug) { Success } else { Failure }
+        if(Start-DarkSession -LogAll -EnableVerbose) { Success } else { Failure }
         #---
-        if(Start-GPLog -EnableDebug -LogOutputDirectory $TMPDir -LogFileNamePrefix $FilePrefix) { Success } else { Failure }
-        if(Start-GPLog -EnableDebug -EnableVerbose -LogOutputDirectory $TMPDir) { Success } else { Failure }
-        if(Start-GPLog -EnableDebug -EnableVerbose -LogFileNamePrefix $FilePrefix) { Success } else { Failure }
-        if(Start-GPLog -EnableDebug -EnableVerbose -IncludeTranscript) { Success } else { Failure }
-        if(Start-GPLog -LogLast -EnableDebug -IncludeTranscript) { Success } else { Failure }
-        if(Start-GPLog -LogAll -EnableDebug -EnableVerbose) { Success } else { Failure }
-        if(Start-GPLog -LogAll -LogLast -EnableDebug) { Success } else { Failure }
-        if(Start-GPLog -LogAll -LogLast -EnableVerbose) { Success } else { Failure }
-        if(Start-GPLog -LogLast -EnableVerbose -IncludeTranscript) { Success } else { Failure }
-        if(Start-GPLog -LogLast -EnableDebug -EnableVerbose) { Success } else { Failure }
+        if(Start-DarkSession -EnableDebug -LogOutputDirectory $TMPDir -LogFileNamePrefix $FilePrefix) { Success } else { Failure }
+        if(Start-DarkSession -EnableDebug -EnableVerbose -LogOutputDirectory $TMPDir) { Success } else { Failure }
+        if(Start-DarkSession -EnableDebug -EnableVerbose -LogFileNamePrefix $FilePrefix) { Success } else { Failure }
+        if(Start-DarkSession -EnableDebug -EnableVerbose -IncludeTranscript) { Success } else { Failure }
+        if(Start-DarkSession -LogLast -EnableDebug -IncludeTranscript) { Success } else { Failure }
+        if(Start-DarkSession -LogAll -EnableDebug -EnableVerbose) { Success } else { Failure }
+        if(Start-DarkSession -LogAll -LogLast -EnableDebug) { Success } else { Failure }
+        if(Start-DarkSession -LogAll -LogLast -EnableVerbose) { Success } else { Failure }
+        if(Start-DarkSession -LogLast -EnableVerbose -IncludeTranscript) { Success } else { Failure }
+        if(Start-DarkSession -LogLast -EnableDebug -EnableVerbose) { Success } else { Failure }
         #---
-        if(Start-GPLog -EnableDebug -EnableVerbose -LogOutputDirectory $TMPDir -LogFileNamePrefix $FilePrefix) { Success } else { Failure }
-        if(Start-GPLog -EnableDebug -EnableVerbose -IncludeTranscript -LogOutputDirectory $TMPDir) { Success } else { Failure }
-        if(Start-GPLog -EnableDebug -EnableVerbose -IncludeTranscript -LogFileNamePrefix $FilePrefix) { Success } else { Failure }
-        if(Start-GPLog -LogAll -LogLast -EnableDebug -IncludeTranscript) { Success } else { Failure }
-        if(Start-GPLog -LogAll -LogLast -EnableVerbose -IncludeTranscript) { Success } else { Failure }
-        if(Start-GPLog -LogAll -LogLast -EnableDebug -EnableVerbose) { Success } else { Failure }
-        if(Start-GPLog -LogLast -EnableDebug -EnableVerbose -IncludeTranscript) { Success } else { Failure }
-        if(Start-GPLog -LogAll -LogLast -EnableDebug -EnableVerbose -IncludeTranscript) { Success } else { Failure }
+        if(Start-DarkSession -EnableDebug -EnableVerbose -LogOutputDirectory $TMPDir -LogFileNamePrefix $FilePrefix) { Success } else { Failure }
+        if(Start-DarkSession -EnableDebug -EnableVerbose -IncludeTranscript -LogOutputDirectory $TMPDir) { Success } else { Failure }
+        if(Start-DarkSession -EnableDebug -EnableVerbose -IncludeTranscript -LogFileNamePrefix $FilePrefix) { Success } else { Failure }
+        if(Start-DarkSession -LogAll -LogLast -EnableDebug -IncludeTranscript) { Success } else { Failure }
+        if(Start-DarkSession -LogAll -LogLast -EnableVerbose -IncludeTranscript) { Success } else { Failure }
+        if(Start-DarkSession -LogAll -LogLast -EnableDebug -EnableVerbose) { Success } else { Failure }
+        if(Start-DarkSession -LogLast -EnableDebug -EnableVerbose -IncludeTranscript) { Success } else { Failure }
+        if(Start-DarkSession -LogAll -LogLast -EnableDebug -EnableVerbose -IncludeTranscript) { Success } else { Failure }
         #---
-        if(Start-GPLog -EnableDebug -EnableVerbose -IncludeTranscript -LogOutputDirectory $TMPDir -LogFileNamePrefix $FilePrefix) { Success } else { Failure }
+        if(Start-DarkSession -EnableDebug -EnableVerbose -IncludeTranscript -LogOutputDirectory $TMPDir -LogFileNamePrefix $FilePrefix) { Success } else { Failure }
         #---
     }
     function Test-LogFileCreation{
@@ -72,28 +72,27 @@ Import-Module GPoSh.Logging
         #$LogNamePrefix = $($ScriptName.Substring(0, $ScriptName.IndexOf((".{0}" -f @($ScriptName.Split(".") | Select -Last 1)[0]))))
         #$LogLast       = ("{0}\{1}_LAST.log" -f $ScriptDir, $LogNamePrefix)
         #$LogAll        = ("{0}\{1}.log" -f $ScriptDir, $LogNamePrefix)
-        #Start-GPLog -LogAll $LogAll -LogLast $LogLast -EnableDebug -EnableVerbose -IncludeTranscript
-        Start-GPLog -LogAll -LogLast -EnableDebug -EnableVerbose -IncludeTranscript
-        Stop-GPLog
+        #New-DarkSessionLog -LogAll $LogAll -LogLast $LogLast -EnableDebug -EnableVerbose -IncludeTranscript
+        Start-DarkSession -LogAll -LogLast -EnableDebug -EnableVerbose -IncludeTranscript
+        Stop-DarkSession
     }
 #endregion
-Write-Host "*********************************"
-Write-Host "*** SCRIPT INVOCATION DETAILS ***"
-Write-Host "*********************************"
-<#
-$InvocationInfo=[PSCustomObject]@{
-    MyCommand = ($MyInvocation.MyCommand | Select * -ExcludeProperty 'ScriptBlock', 'ScriptContents')
+
+
+
+try{
+    Start-DarkSession -LogAll -LogLast -EnableDebug -EnableVerbose -IncludeTranscript
+    New-DarkLogMessage -MessagePrefix "  |-" -Message "Testing VERBOSE message." -MessageLevel Verbose
+    New-DarkLogMessage -Message "Testing DEBUG message." -MessageLevel Debug
+    New-DarkLogMessage -Message "Testing INFORMATION message." -MessageLevel Information
+    New-DarkLogMessage -Message "Testing WARNING message." -MessageLevel Warning
+    New-DarkLogMessage -Message "Testing ERROR message." -MessageLevel Error
+    #Test-StartStopGPSession
+    #Test-LogFileCreation
+    #New-DarkLogMessage -MessagePrefix "*" -Message "TESTING"
+} catch {
+    New-DarkLogMessage -Message $_
+} finally {
+    Stop-DarkSession
 }
-$MyInvocation | Get-Member -MemberType Property | Where { $_.Name -notin @( 'MyCommand' ) } | %{
-    $InvocationInfo | Add-Member -MemberType NoteProperty -Name $_.Name -Value $_.Value
-}
-$InvocationInfo | ConvertTo-Json
-#>
-$MyInvocation
-Write-Host "*********************************"
-
-
-#Test-StartStopGPSession
-Test-LogFileCreation
-
 Remove-Module GPoSh.Logging
