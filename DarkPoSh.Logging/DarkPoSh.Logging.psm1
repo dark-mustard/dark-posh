@@ -4,7 +4,7 @@
     #New-Variable -Scope Script -Visibility Private -Name "VariableVisibility" -Value "Private"
         New-Variable -Scope Script -Visibility Private -Name "VariableVisibility" -Value "Public"
     New-Variable -Scope Script -Visibility $script:VariableVisibility -Name "ModuleIdentifier" -Value $((New-Guid).Guid.Replace("-", ""))
-    New-Variable -Scope Script -Visibility $script:VariableVisibility -Name "GPLogSessions" -Value @{}
+    New-Variable -Scope Script -Visibility $script:VariableVisibility -Name "DarkLogSessions" -Value @{}
     function LogSessionData{
         param(
             $SessionData = $(Get-DarkSessionInfo)
@@ -22,14 +22,14 @@
         Write-Host "* MODULE UNLOADING" -ForegroundColor White -BackgroundColor Red
         #LogSessionData
         Write-Host "********************" -ForegroundColor White -BackgroundColor Red
-        #Remove-Variable -Scope Script -Name "GPLogSessionID"
-        Remove-Variable -Scope Script -Name "GPLogSessions"
+        #Remove-Variable -Scope Script -Name "DarkLogSessionID"
+        Remove-Variable -Scope Script -Name "DarkLogSessions"
         Remove-Variable -Scope Script -Name "ModuleIdentifier"
         Remove-Variable -Scope Script -Name "VariableVisibility"
     }
     
 #endregion
-#region GPoSh.Logging
+#region DarkPoSh.Logging
     #region Logging / Output formatting
         enum DarkLogMessageLevel{
             Verbose = 0
@@ -56,7 +56,7 @@
             )
 
             # Pull "Last Run" values (if they exist) in the event of a null settings param
-            $SD=$script:GPLogSessions[$script:GPLogSessionID]
+            $SD=$script:DarkLogSessions[$script:DarkLogSessionID]
             $LC=$SD.LoggingContext
             $WriteBackParams=@{
                 MessagePrefix = $LC.LastMessageParams.MessagePrefix
@@ -279,8 +279,8 @@
                 if(-Not $ConsoleOnly){
                     # Output to log files (if in use)
                     $LogOutputMessageText = $LogOutputMessageLines -join [Environment]::NewLine
-                    if($null -ne $script:GPLogSessionID){
-                        $script:GPLogSessions[$script:GPLogSessionID].LogList.Values | Where-Object { $_.LogName -notin @("GPLog_DEBUG") } | ForEach-Object { 
+                    if($null -ne $script:DarkLogSessionID){
+                        $script:DarkLogSessions[$script:DarkLogSessionID].LogList.Values | Where-Object { $_.LogName -notin @("DarkLog_DEBUG") } | ForEach-Object { 
                             #$LogOutputMessageText | Out-File $_.FilePath -Append:$($_.AppendBehavior) -Force
                             $LogOutputMessageText | Out-File $_.FilePath -Append:$true -Force
                         }
@@ -406,7 +406,7 @@
                 [ValidateNotNull()]
                     $ErrorObject
             )
-            ($script:GPLogSessions[$script:GPLogSessionID]).RuntimeInfo.Errors+=$ErrorObject
+            ($script:DarkLogSessions[$script:DarkLogSessionID]).RuntimeInfo.Errors+=$ErrorObject
             throw $ErrorObject
         }
         function Handle-Exception{
@@ -420,7 +420,7 @@
                 [Parameter(Mandatory=$false)]
                     [Switch]$ConsoleOnly
             )
-            ($script:GPLogSessions[$script:GPLogSessionID]).RuntimeInfo.Errors+=$ErrorObject
+            ($script:DarkLogSessions[$script:DarkLogSessionID]).RuntimeInfo.Errors+=$ErrorObject
             Write-DarkLog -Message $ErrorObject -MessageLevel Error -ConsoleOnly:$ConsoleOnly
         }
         #region Session information retrieval
@@ -435,12 +435,12 @@
                 $SessionInfo=$null
                 try{
                     if([String]::IsNullOrWhiteSpace($SessionIdentifier)){
-                        $SessionIdentifier=$script:GPLogSessionID
+                        $SessionIdentifier=$script:DarkLogSessionID
                     }
                     if(-Not [String]::IsNullOrWhiteSpace($SessionIdentifier)){
-                        if($null -ne $script:GPLogSessions) {
-                            if($script:GPLogSessions.ContainsKey($SessionIdentifier)){
-                                $SessionInfo=$script:GPLogSessions[$SessionIdentifier]
+                        if($null -ne $script:DarkLogSessions) {
+                            if($script:DarkLogSessions.ContainsKey($SessionIdentifier)){
+                                $SessionInfo=$script:DarkLogSessions[$SessionIdentifier]
                             } else {
                                 throw ("Could not find information object for session. [{0}]" -f $SessionIdentifier)
                             }
@@ -487,7 +487,7 @@
             }
         #endregion
         function New-DarkSessionLog{
-            [Alias("New-GPSessionLog", "Add-GPLogToSession")]
+            #[Alias()]
             [CmdletBinding()]
             #[OutputType([Boolean])]
             param(
@@ -553,7 +553,7 @@
                             AppendBehavior    = $AppendOnly
                             OverwriteBehavior = (-Not $AppendOnly)
                         }
-                        #$script:GPLogSessions[$script:GPLogSessionID].LogList.Add($LogName, $LogObject)
+                        #$script:DarkLogSessions[$script:DarkLogSessionID].LogList.Add($LogName, $LogObject)
                         (Get-DarkSessionInfo).LogList.Add($LogName, $LogObject)
                     #endregion
                     $Success = $true
@@ -571,7 +571,7 @@
                 } else {
                     $script:SessionIndex += 1
                 }
-                $script:GPLogSessions | 
+                $script:DarkLogSessions | 
                     Where-Object { $_.SessionID -like "$($script:ModuleIdentifier)*" } | 
                         Sort-Object SessionID -Desc |
                             Select-Object @{ Name="SessionIndex"; Expression={ [Int32]::Parse($_.SessionID.Split(":")[1]) + 1 }} -First 1 | 
@@ -583,12 +583,12 @@
                 return $NewLogSessionID
             }
             function Set-DarkSessionID{
-                if(-Not $script:GPLogSessionID){
-                    New-Variable -Scope "Script" -Visibility $script:VariableVisibility -Name "GPLogSessionID" -Value $null
+                if(-Not $script:DarkLogSessionID){
+                    New-Variable -Scope "Script" -Visibility $script:VariableVisibility -Name "DarkLogSessionID" -Value $null
                 }
-                $script:GPLogSessionID = New-DarkSessionID
-                Write-Host ("Log Session Identifier: {0}" -f $script:GPLogSessionID)
-                return $script:GPLogSessionID
+                $script:DarkLogSessionID = New-DarkSessionID
+                Write-Host ("Log Session Identifier: {0}" -f $script:DarkLogSessionID)
+                return $script:DarkLogSessionID
             }
             function New-DarkSession{
                 param(
@@ -604,7 +604,7 @@
                 Set-DarkSessionID
                 $local:CallStack=@(Get-PSCallStack)
                 $SessionData=[PSCustomObject]@{
-                    SessionID = $script:GPLogSessionID
+                    SessionID = $script:DarkLogSessionID
                     Origin = ([PSCustomObject]@{
                         CallStack=$local:CallStack
                         RootInvocation=$CallStack[($CallStack.Count - 1)]
@@ -637,7 +637,7 @@
                         #----------------------------------------------
                     })
                     LoggingContext = ([PSCustomObject]@{
-                        SessionID = $script:GPLogSessionID
+                        SessionID = $script:DarkLogSessionID
                         FirstMessageReceived = $false
                         LogMessagePrefixDepth=$SessionData.LoggingPrefs.DefaultLogMessagePrefixDepth
                         LogMessagePrefix=$SessionData.LoggingPrefs.DefaultLogMessagePrefixHeader
@@ -668,7 +668,7 @@
                     })
                 $SessionData.LoggingContext | Add-Member -MemberType ScriptMethod -Name "SessionData" -Value {
                         param()
-                        return $script:GPLogSessions[$this.SessionID]
+                        return $script:DarkLogSessions[$this.SessionID]
                     }
                 $SessionData.LoggingContext | Add-Member -MemberType ScriptMethod -Name "RecordLastMessageParams" -Value {
                         param(
@@ -739,7 +739,7 @@
                     }
                 
                 
-                $script:GPLogSessions.Add( $script:GPLogSessionID, $SessionData )
+                $script:DarkLogSessions.Add( $script:DarkLogSessionID, $SessionData )
                 #$SessionData
                 #LogSessionData -SessionData $SessionData
                 return $SessionData
@@ -755,7 +755,7 @@
                         1) $DebugPreference
                         2) $VerbosePreference
                         3) Ouput location for rotating and / or appending transcript that includes redirected output.
-                    (Meant to be used along with Stop-GPScript for environment settings reset & cleanup.)
+                    (Meant to be used along with Stop-DarkSession for environment settings reset & cleanup.)
                     Author       : Greg Phillips
                     Version      : 1.0.0
                     Version-Date : 2021.06.15
@@ -764,17 +764,17 @@
                 .LINK 
                 
                 .EXAMPLE
-                    PS C:\> Start-GPLog
+                    PS C:\> Start-DarkSession
                     This does nothing.  Don't do this.
                 .EXAMPLE
-                    PS C:\> Start-GPLog -EnableDebug
+                    PS C:\> Start-DarkSession -EnableDebug
                     Shell display will include Debug messages.
                 .EXAMPLE
-                    PS C:\> Start-GPLog -LogLast "C:\ScriptLogs\LastScriptRun.log" -EnableDebug:$false -EnableVerbose
+                    PS C:\> Start-DarkSession -LogLast "C:\ScriptLogs\LastScriptRun.log" -EnableDebug:$false -EnableVerbose
                     Outputs to rotating log file that will always maintain the log from the last script run. 
                     Shell display / log output will include Verbose messages, but not Debug messages, regardless of existing shell settings.
                 .EXAMPLE
-                    PS C:\> Start-GPLog -LogAll ("{0}\logtmp{1}\DailyScriptLog.log" -f $env:tmp, (Get-Date).ToString("yyyyMMdd")) `
+                    PS C:\> Start-DarkSession -LogAll ("{0}\logtmp{1}\DailyScriptLog.log" -f $env:tmp, (Get-Date).ToString("yyyyMMdd")) `
                                         -LogLast ("{0}\logtmp{1}\ScriptRun_{2}.log" -f $env:tmp, (Get-Date).ToString("HHmmss"))
                     Creates a daily rotating log file, as well as single log file each run in a TMP folder.
                     Output file paths based on the example above would look something like this:
@@ -782,7 +782,7 @@
                         [LogLast] C:\Users\temp\AppData\Local\Temp\logtmp20211026\ScriptRun_220428.log
                     Shell display / log output will follow existing Debug / Verbose prefences.
             #>
-            [alias("New-GPSession", "Start-GPLog")]
+            #[Alias()]
             [CmdletBinding()]
             [OutputType([Boolean])]
             param(
@@ -857,7 +857,7 @@
 
                 # Set up log files
                 if($IncludeTranscript.IsPresent){
-                    New-DarkSessionLog -LogName "GPLog_DEBUG" -FilePath $LogPath_DEBUG
+                    New-DarkSessionLog -LogName "DarkLog_DEBUG" -FilePath $LogPath_DEBUG
                     # Attempt to stop any transcripts already running.
                     try{
                         Stop-Transcript -InformationAction "SilentlyContinue" -WarningAction "SilentlyContinue"  -ErrorAction "SilentlyContinue" | Out-Null
@@ -868,14 +868,14 @@
                     Start-Transcript -Path $LogPath_DEBUG -Append:$false -Force:$true | Out-Null
                 }
                 if($LogAll.IsPresent){
-                    New-DarkSessionLog -LogName "GPLog_All"  -FilePath $LogPath_ALL  -AppendOnly
+                    New-DarkSessionLog -LogName "DarkLog_All"  -FilePath $LogPath_ALL  -AppendOnly
                 }
                 if($LogLast.IsPresent){
-                    New-DarkSessionLog -LogName "GPLog_Last"  -FilePath $LogPath_LAST
+                    New-DarkSessionLog -LogName "DarkLog_Last"  -FilePath $LogPath_LAST
                 }
                 #if($PSCmdlet.ParameterSetName -like "Transcript*"){
-                #    New-DarkSessionLog -LogName "GPLog_All"  -FilePath $LogPath_ALL  -AppendOnly
-                #    New-DarkSessionLog -LogName "GPLog_Last" -FilePath $LogPath_LAST
+                #    New-DarkSessionLog -LogName "DarkLog_All"  -FilePath $LogPath_ALL  -AppendOnly
+                #    New-DarkSessionLog -LogName "DarkLog_Last" -FilePath $LogPath_LAST
                 #} 
             } catch {
                 Handle-Exception-Internal -ErrorObject $_
@@ -888,12 +888,12 @@
             return $Success
         }
         function Stop-DarkSession {
-            [alias("Stop-GPLog")]
+            [alias("Stop-DarkSession")]
             [CmdletBinding()]
             [OutputType([String[]])]
             param()
 
-            $SessionData = $script:GPLogSessions[$script:GPLogSessionID]
+            $SessionData = $script:DarkLogSessions[$script:DarkLogSessionID]
             #$SessionData = (Get-DarkSessionInfo)
             [String[]] $ReturnFileList = ($SessionData.LogList | Select-Object FilePath).FilePath
 
@@ -904,19 +904,19 @@
             Write-DarkLog -MessagePrefix "" -Message " * # Process complete. # "
             Write-DarkLog -MessagePrefix "" -Message " ************************"
             
-            #if(@((Get-DarkSessionLog -LogName "GPLog_DEBUG")).Count -gt 0){
-            if(@($SessionData.LogList.Values | Where-Object { $_.LogName -eq "GPLog_DEBUG" }).Count -gt 0){
+            #if(@((Get-DarkSessionLog -LogName "DarkLog_DEBUG")).Count -gt 0){
+            if(@($SessionData.LogList.Values | Where-Object { $_.LogName -eq "DarkLog_DEBUG" }).Count -gt 0){
                 # Close transcript (if in use)
                 Stop-Transcript | Out-Null
             }
 
-            $LogFileList = @($script:GPLogSessions[$script:GPLogSessionID].LogList.Values.FilePath)
+            $LogFileList = @($script:DarkLogSessions[$script:DarkLogSessionID].LogList.Values.FilePath)
             $ReturnFileList=$LogFileList -join ","
             
             # Remove session from session list and cleanup resources
                 $global:LAST_SESSION_DATA=$SessionData
-            $script:GPLogSessions.Remove($script:GPLogSessionID)
-            Remove-Variable -Scope "Script" -Name "GPLogSessionID" | Out-Null
+            $script:DarkLogSessions.Remove($script:DarkLogSessionID)
+            Remove-Variable -Scope "Script" -Name "DarkLogSessionID" | Out-Null
                     
             # End all other existing imported remote sessions
             Get-PSSession | Remove-PSSession

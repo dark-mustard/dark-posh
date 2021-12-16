@@ -6,7 +6,7 @@
     #  |-Guid: ID used to uniquely identify this module
         GUID = '56ee9538-16b0-488d-83e1-563f335a9233'
     #  |-ModuleVersion: Version number of this module.
-        ModuleVersion = '1.0.1'
+        ModuleVersion = '1.0.2'
     #  |-Description: Description of the functionality provided by this module
         Description = 'Logging - Cmdlets for logging script runtime information.'
     #  |-Author: Author of this module
@@ -16,7 +16,7 @@
     #  |-Copyright: Copyright statement for this module
         Copyright = '(c) Greg Phillips. All rights reserved.'
     #  |-RootModule: Script module or binary module file associated with this manifest.
-        RootModule = 'GPoSh.Logging.psm1'
+        RootModule = 'DarkPoSh.Logging.psm1'
     #  |-HelpInfoURI: HelpInfo URI of this module
         #HelpInfoURI = ''
     #  \
@@ -64,15 +64,15 @@
     # Functions to export from this module, for best performance, do not use wildcards and do not delete the entry, use an empty array if there are no functions to export.
         #FunctionsToExport = @()
         FunctionsToExport = @( 
-            "Write-DarkLog"
             "Start-DarkSession"
             "Stop-DarkSession"
+            "Write-DarkLog"
         )
     # Cmdlets to export from this module, for best performance, do not use wildcards and do not delete the entry, use an empty array if there are no cmdlets to export.
         CmdletsToExport = @(
-            "Write-DarkLog"
             "Start-DarkSession"
             "Stop-DarkSession"
+            "Write-DarkLog"
         ) 
     # Variables to export from this module
         #VariablesToExport = @()
