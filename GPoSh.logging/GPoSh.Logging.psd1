@@ -6,7 +6,7 @@
     #  |-Guid: ID used to uniquely identify this module
         GUID = '56ee9538-16b0-488d-83e1-563f335a9233'
     #  |-ModuleVersion: Version number of this module.
-        ModuleVersion = '1.0.0'
+        ModuleVersion = '1.0.1'
     #  |-Description: Description of the functionality provided by this module
         Description = 'Logging - Cmdlets for logging script runtime information.'
     #  |-Author: Author of this module
@@ -64,20 +64,18 @@
     # Functions to export from this module, for best performance, do not use wildcards and do not delete the entry, use an empty array if there are no functions to export.
         #FunctionsToExport = @()
         FunctionsToExport = @( 
-            "New-DarkLogMessage"
+            "Write-DarkLog"
             "Start-DarkSession"
             "Stop-DarkSession"
         )
     # Cmdlets to export from this module, for best performance, do not use wildcards and do not delete the entry, use an empty array if there are no cmdlets to export.
         CmdletsToExport = @(
-            "New-DarkLogMessage"
+            "Write-DarkLog"
             "Start-DarkSession"
             "Stop-DarkSession"
-        )
-        #CmdletsToExport = @( "etp*" )  
+        ) 
     # Variables to export from this module
         #VariablesToExport = @()
-        #VariablesToExport = @( "etp*" )
     # Aliases to export from this module, for best performance, do not use wildcards and do not delete the entry, use an empty array if there are no aliases to export.
         #AliasesToExport = 'Swap-AzureRmWebAppSlot'
     # DSC resources to export from this module
@@ -85,8 +83,7 @@
 
     #>???
     # Default prefix for commands exported from this module. Override the default prefix using Import-Module -Prefix.
-        #DefaultCommandPrefix = 'etp'
-        #DefaultCommandPrefix = 'etpLog'
+        #DefaultCommandPrefix = 'dposh'
     # List of all modules packaged with this module
         # ModuleList = @()
     # List of all files packaged with this module

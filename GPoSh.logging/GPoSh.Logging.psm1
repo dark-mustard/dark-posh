@@ -43,8 +43,8 @@
             Success = 1
             Failure = 2
         }
-        function New-DarkLogMessage {
-            [Alias("New-GPLogMessage")]
+        function Write-DarkLog {
+            [Alias("New-DarkLogMessage")]
             [CmdletBinding()]
             param(
                 [Object] $Message,
@@ -289,7 +289,9 @@
 
                 # Save "Last Run" settings back to session context
                 #if($LC.FirstMessageReceived){
-                    $LC.RecordLastMessageParams($WriteBackParams)
+                    #if(-Not $LC.RecordLastMessageParams($WriteBackParams)){
+                    #    Handle-Exception-Internal -ErrorObject "Unable to record last message params."
+                    #} 
                 #}
             }
         }
@@ -395,7 +397,19 @@
         }
     #endregion
     #region Session Management
-        function HandleException{
+        function Handle-Exception-Internal{
+            #[Alias()]
+            [CmdletBinding()]
+            [OutputType([HashTable])]
+            param(
+                [Parameter(Mandatory=$true, ValueFromPipeline=$true, Position=0)]
+                [ValidateNotNull()]
+                    $ErrorObject
+            )
+            ($script:GPLogSessions[$script:GPLogSessionID]).RuntimeInfo.Errors+=$ErrorObject
+            throw $ErrorObject
+        }
+        function Handle-Exception{
             #[Alias()]
             [CmdletBinding()]
             [OutputType([HashTable])]
@@ -407,7 +421,7 @@
                     [Switch]$ConsoleOnly
             )
             ($script:GPLogSessions[$script:GPLogSessionID]).RuntimeInfo.Errors+=$ErrorObject
-            New-DarkLogMessage -Message $ErrorObject -MessageLevel Error -ConsoleOnly:$ConsoleOnly
+            Write-DarkLog -Message $ErrorObject -MessageLevel Error -ConsoleOnly:$ConsoleOnly
         }
         #region Session information retrieval
             function Get-DarkSessionInfo{
@@ -438,7 +452,7 @@
                     }
                 } catch {
                     $SessionInfo=$null
-                    HandleException -ErrorObject $_ #-ConsoleOnly
+                    Handle-Exception -ErrorObject $_ #-ConsoleOnly
                 }
                 return $SessionInfo
             }
@@ -710,7 +724,7 @@
                             $Params["MessagePrefix"]=$SessionData.LoggingContext.LogMessagePrefix
                             
                             # Log termination string message
-                            New-DarkLogMessage @Params
+                            Write-DarkLog @Params
 
                             # Decrease message prefix depth and calculate new message prefix string
                             $SessionData.LoggingContext.LogMessagePrefixDepth -= $SessionData.LoggingContext.LogMessagePrefixDepth
@@ -769,40 +783,36 @@
                     Shell display / log output will follow existing Debug / Verbose prefences.
             #>
             [alias("New-GPSession", "Start-GPLog")]
-            [CmdletBinding(DefaultParameterSetName='NoInput')]
+            [CmdletBinding()]
             [OutputType([Boolean])]
             param(
-                [Parameter(Mandatory=$false, ParameterSetName="Transcript")]
-                [Parameter(Mandatory=$false, ParameterSetName="Transcript_All")]
-                [Parameter(Mandatory=$false, ParameterSetName="Transcript_Last")]
-                [Parameter(Mandatory=$false, ParameterSetName="NoTranscript")]
-                    [System.String] $LogOutputDirectory = $null,
-                [Parameter(Mandatory=$false, ParameterSetName="Transcript")]
-                [Parameter(Mandatory=$false, ParameterSetName="Transcript_All")]
-                [Parameter(Mandatory=$false, ParameterSetName="Transcript_Last")]
-                [Parameter(Mandatory=$false, ParameterSetName="NoTranscript")]
-                    [System.String] $LogFileNamePrefix = $null,
-                [Parameter(Mandatory=$true, ParameterSetName="Transcript")]
-                [Parameter(Mandatory=$true, ParameterSetName="Transcript_All")]
+                [Parameter(Mandatory=$true,  ParameterSetName="Log_All")]
                     [Switch] $LogAll,
-                [Parameter(Mandatory=$true, ParameterSetName="Transcript")]
-                [Parameter(Mandatory=$true, ParameterSetName="Transcript_Last")]
+                [Parameter(Mandatory=$false, ParameterSetName="Log_All")]
+                [Parameter(Mandatory=$true,  ParameterSetName="Log_Last")]
                     [Switch] $LogLast,
-                [Parameter(Mandatory=$false, ParameterSetName="Transcript")]
-                [Parameter(Mandatory=$false, ParameterSetName="Transcript_All")]
-                [Parameter(Mandatory=$false, ParameterSetName="Transcript_Last")]
-                [Parameter(Mandatory=$false, ParameterSetName="NoTranscript")]
+                [Parameter(Mandatory=$false, ParameterSetName="Log_All")]
+                [Parameter(Mandatory=$false, ParameterSetName="Log_Last")]
+                [Parameter(Mandatory=$true,  ParameterSetName="Include_Transcript")]
+                    [Switch] $IncludeTranscript,
+                [Parameter(Mandatory=$false, ParameterSetName="Include_Transcript")]
+                [Parameter(Mandatory=$false, ParameterSetName="Log_All")]
+                [Parameter(Mandatory=$false, ParameterSetName="Log_Last")]
+                    [System.String] $LogOutputDirectory = $null,
+                [Parameter(Mandatory=$false, ParameterSetName="Include_Transcript")]
+                [Parameter(Mandatory=$false, ParameterSetName="Log_All")]
+                [Parameter(Mandatory=$false, ParameterSetName="Log_Last")]
+                    [System.String] $LogFileNamePrefix = $null,
+                [Parameter(Mandatory=$false, ParameterSetName="Include_Transcript")]
+                [Parameter(Mandatory=$false, ParameterSetName="Log_All")]
+                [Parameter(Mandatory=$false, ParameterSetName="Log_Last")]
+                [Parameter(Mandatory=$false, ParameterSetName="NoLogs")]
                     [Switch] $EnableDebug,
-                [Parameter(Mandatory=$false, ParameterSetName="Transcript")]
-                [Parameter(Mandatory=$false, ParameterSetName="Transcript_All")]
-                [Parameter(Mandatory=$false, ParameterSetName="Transcript_Last")]
-                [Parameter(Mandatory=$false, ParameterSetName="NoTranscript")]
-                    [Switch] $EnableVerbose,
-                [Parameter(Mandatory=$false, ParameterSetName="Transcript")]
-                [Parameter(Mandatory=$false, ParameterSetName="Transcript_All")]
-                [Parameter(Mandatory=$false, ParameterSetName="Transcript_Last")]
-                [Parameter(Mandatory=$false, ParameterSetName="NoTranscript")]
-                    [Switch] $IncludeTranscript
+                [Parameter(Mandatory=$false, ParameterSetName="Include_Transcript")]
+                [Parameter(Mandatory=$false, ParameterSetName="Log_All")]
+                [Parameter(Mandatory=$false, ParameterSetName="Log_Last")]
+                [Parameter(Mandatory=$false, ParameterSetName="NoLogs")]
+                    [Switch] $EnableVerbose
             )
 
             #region Initialize variables
@@ -845,34 +855,35 @@
                 $global:DebugPreference   = $SD.LoggingPrefs.Debug.Session
                 $global:VerbosePreference = $SD.LoggingPrefs.Verbose.Session
 
-                # Start transcript if any filepaths were specified
-                if($IncludeTranscript){
+                # Set up log files
+                if($IncludeTranscript.IsPresent){
+                    New-DarkSessionLog -LogName "GPLog_DEBUG" -FilePath $LogPath_DEBUG
+                    # Attempt to stop any transcripts already running.
                     try{
-                        New-DarkSessionLog -LogName "GPLog_DEBUG" -FilePath $LogPath_DEBUG
-                        # Attempt to stop any transcripts already running.
-                        try{
-                            Stop-Transcript -InformationAction "SilentlyContinue" -WarningAction "SilentlyContinue"  -ErrorAction "SilentlyContinue" | Out-Null
-                        } catch {
-                            # DO NOTHING
-                        }
-                        # Start the transcript
-                        Start-Transcript -Path $LogPath_DEBUG -Append:$false -Force:$true | Out-Null
+                        Stop-Transcript -InformationAction "SilentlyContinue" -WarningAction "SilentlyContinue"  -ErrorAction "SilentlyContinue" | Out-Null
                     } catch {
-                        HandleException -ErrorObject $_ #-ConsoleOnly
-                        $Success = $false
+                        # DO NOTHING
                     }
+                    # Start the transcript
+                    Start-Transcript -Path $LogPath_DEBUG -Append:$false -Force:$true | Out-Null
                 }
-                if($PSCmdlet.ParameterSetName -like "Transcript*"){
+                if($LogAll.IsPresent){
                     New-DarkSessionLog -LogName "GPLog_All"  -FilePath $LogPath_ALL  -AppendOnly
-                    New-DarkSessionLog -LogName "GPLog_Last" -FilePath $LogPath_LAST
-                } 
+                }
+                if($LogLast.IsPresent){
+                    New-DarkSessionLog -LogName "GPLog_Last"  -FilePath $LogPath_LAST
+                }
+                #if($PSCmdlet.ParameterSetName -like "Transcript*"){
+                #    New-DarkSessionLog -LogName "GPLog_All"  -FilePath $LogPath_ALL  -AppendOnly
+                #    New-DarkSessionLog -LogName "GPLog_Last" -FilePath $LogPath_LAST
+                #} 
             } catch {
-                HandleException -ErrorObject $_ #-ConsoleOnly
+                Handle-Exception-Internal -ErrorObject $_
                 $Success = $false
             }
             
-            New-DarkLogMessage -MessagePrefix "" -Message " ************************"
-            New-DarkLogMessage -MessagePrefix "" -Message " * # Process started. # "
+            Write-DarkLog -MessagePrefix "" -Message " ************************"
+            Write-DarkLog -MessagePrefix "" -Message " * # Process started.  # "
 
             return $Success
         }
@@ -890,8 +901,8 @@
             $global:DebugPreference   = $SessionData.LoggingPrefs.Debug.Init
             $global:VerbosePreference = $SessionData.LoggingPrefs.Verbose.Init
 
-            New-DarkLogMessage -MessagePrefix "" -Message " * # Process complete. # "
-            New-DarkLogMessage -MessagePrefix "" -Message " ************************"
+            Write-DarkLog -MessagePrefix "" -Message " * # Process complete. # "
+            Write-DarkLog -MessagePrefix "" -Message " ************************"
             
             #if(@((Get-DarkSessionLog -LogName "GPLog_DEBUG")).Count -gt 0){
             if(@($SessionData.LogList.Values | Where-Object { $_.LogName -eq "GPLog_DEBUG" }).Count -gt 0){
