@@ -2,15 +2,16 @@
 
     # Generate id value unique to module import context
     #New-Variable -Scope Script -Visibility Private -Name "VariableVisibility" -Value "Private"
-        New-Variable -Scope Script -Visibility Private -Name "VariableVisibility" -Value "Public"
+        New-Variable -Scope Script -Visibility Public -Name "VariableVisibility" -Value "Public"
     New-Variable -Scope Script -Visibility $script:VariableVisibility -Name "ModuleIdentifier" -Value $((New-Guid).Guid.Replace("-", ""))
+    New-Variable -Scope Script -Visibility $script:VariableVisibility -Name "ModuleErrors" -Value @()
     New-Variable -Scope Script -Visibility $script:VariableVisibility -Name "DarkLogSessions" -Value @{}
     function LogSessionData{
         param(
             $SessionData = $(Get-DarkSessionInfo)
         )
         Write-Host "* --> Session info: $([Environment]::NewLine)"
-        $($SessionData | ConvertTo-Json -Depth 4).Split([Environment]::NewLine) | %{
+        $($SessionData | ConvertTo-Json -Depth 4).Split([Environment]::NewLine) | ForEach-Object {
             if(-Not [String]::IsNullOrWhiteSpace($_)){
                 Write-Host ("*       | {0}" -f $_)
             }
@@ -69,7 +70,7 @@
                 $WriteBackParams["MessagePrefix"] = $SD.LoggingPrefs.DefaultLogMessagePrefixHeader
             }
             #if($LC.FirstMessageReceived){
-                $WriteBackParams.Keys | %{
+                $WriteBackParams.Keys | ForEach-Object {
                     $Name=$_
                     $LastValue=$WriteBackParams[$_]
                     $CurrentValue=Get-Variable -Scope Local -Name $Name -ErrorAction SilentlyContinue
@@ -330,7 +331,7 @@
                         }
                     }
                     if(-Not [String]::IsNullOrWhiteSpace($local:DarkAlertBody)){
-                        $LineList | %{
+                        $LineList | ForEach-Object {
                             $local:DarkAlertBody+=("{0}<br/>{1}" -f $local:DarkAlertBody.TrimEnd("<br/>").TrimEnd("<br />"), $Element)
                         }
                     }
@@ -358,7 +359,7 @@
             $msgSubject = ("[{0}] ({1} User Groups) Membership Changed" -f $SubjectAlertType, $AppSyncSettings.AppName)
             New-MessageBodyElement
             $msgBody  = "This alert is sent to inform you that one or more AD Users have been added or removed from the following AD groups:  " +
-                $AppSyncSettings.ADSyncTargets.Keys | %{
+                $AppSyncSettings.ADSyncTargets.Keys | ForEach-Object {
                     $msgBody += " * [{$_}] <br />"
                 }
             $msgBody += "The attached log file lists the corrective actions that have already been taken and is for your review only. <br /><br />" + 
@@ -375,15 +376,15 @@
                         Add-MessageFooterElementProperty -Name "Hostname" -Value ($env:computername)
                     }
                     if(-Not $ExcludeIPInfo){
-                        $senderPrivateIP = (Get-NetIPConfiguration | Where-Object { $_.IPv4DefaultGateway -ne $null -and $_.NetAdapter.Status -ne "Disconnected" }).IPv4Address.IPAddress
+                        $senderPrivateIP = (Get-NetIPConfiguration | Where-Object { ($null -ne $_.IPv4DefaultGateway) -and ($_.NetAdapter.Status -ne "Disconnected") }).IPv4Address.IPAddress
                         $MessageFooterElements+=("Private IP" -f $senderPrivateIP)
            
                         $senderPublicIP = $(try{
                                 Invoke-RestMethod https://ifconfig.me
                             } catch {
-                                Invoke-RestMethod http://ipinfo.io/json | Select -exp ip
+                                Invoke-RestMethod http://ipinfo.io/json | Select-Object -exp ip
                             })
-                        $MessageFooterElements.Add("", $senderPrivateIP)
+                        $MessageFooterElements.Add("Public IP", $senderPublicIP)
                     }
                     Add-MessageFooterElement -Message "</table>"
                 }
@@ -406,7 +407,25 @@
                 [ValidateNotNull()]
                     $ErrorObject
             )
-            ($script:DarkLogSessions[$script:DarkLogSessionID]).RuntimeInfo.Errors+=$ErrorObject
+            $SessionInfo = Get-DarkSessionInfo
+            if($null -ne $SessionInfo){
+                if($SessionInfo.PSObject.Properties.Name -notcontains "RuntimeInfo"){
+                    $SessionInfo | Add-Member -MemberType NoteProperty -Name "RuntimeInfo" -Value ([PSCustomObject]@{
+                        Errors=@()
+                    })
+                }
+                $RuntimeInfo=$SessionInfo.RuntimeInfo
+                if($RuntimeInfo.PSObject.Properties.Name -notcontains "Errors"){
+                    $RuntimeInfo | Add-Member -MemberType NoteProperty -Name "Errors" -Value @(
+                            $ErrorObject
+                        )
+                } else {
+                    $RuntimeInfo.Errors+=$ErrorObject
+                }
+            } else {
+                $script:ModuleErrors+=$ErrorObject
+            }
+
             throw $ErrorObject
         }
         function Handle-Exception{
@@ -452,7 +471,7 @@
                     }
                 } catch {
                     $SessionInfo=$null
-                    Handle-Exception -ErrorObject $_ #-ConsoleOnly
+                    #Handle-Exception -ErrorObject $_ #-ConsoleOnly
                 }
                 return $SessionInfo
             }
@@ -486,6 +505,99 @@
                 return $LogObject
             }
         #endregion
+        function New-DarkLog{
+            [Alias("New-DarkSessionLog", "New-GPSessionLog", "Add-GPLogToSession")]
+            [CmdletBinding()]
+            #[OutputType([Boolean])]
+            param(
+                #[Parameter(Mandatory=$true)]
+                #[ValidateNotNull()]
+                #    [String] $SessionIdentifier,
+                [Parameter(Mandatory=$true)]
+                [ValidateNotNull()]
+                    [String] $LogName,
+                [Parameter(Mandatory=$false)]
+                    [String] $FilePath,
+                [Parameter(Mandatory=$false)]
+                    [Switch] $AppendOnly
+            )
+            #$Success = $false
+            
+
+            # Skip items with no file path and 
+            if(-Not [String]::IsNullOrWhiteSpace($FilePath)) {
+                try{
+                    # Skip the transcript file from being created manually
+                    if($FilePath -ne ("{0}.log" -f $script:TranscriptLogFileName)){
+                        #region Initialize file on disk
+                            $FileExists = Test-Path $FilePath
+                            $Overwrite  = (-Not $AppendOnly)
+                            $CreateFile = (-Not $FileExists)
+                            if($FileExists){
+                                # Overwrite or append any existing files with the same name
+                                if($Overwrite){
+                                    Remove-Item -Path $FilePath -Force | Out-Null
+                                    $CreateFile = $true
+                                }
+                            } else {
+                                # Create root folder if it doesn't already exist
+                                $LogDir = (Split-Path $FilePath)
+                                if(-Not (Test-Path $LogDir)){
+                                    New-Item -ItemType Directory -Path $LogDir | Out-Null
+                                }
+                                $CreateFile = $true
+                            }
+                            if($CreateFile){
+                                # Create the file on disk.
+                                New-Item -ItemType File -Path $FilePath -Force | Out-Null
+                            } else {
+                                # Append a seperator to the file.
+                                $SeperatorLines=@(
+                                        ""
+                                        "-------------------------------------"
+                                        ""
+                                    )
+                                $SeperatorLines | %{
+                                    $_ | Out-File $FilePath -Force -Append #| Out-Null
+                                }
+                            }
+                        
+                        #endregion
+                    }
+                    #region Add object to session list
+                        # Add to session list
+                        $LogObject=[PSCustomObject]@{
+                            SessionID         = $SessionID
+                            Session           = {
+                                    param()
+                                    <#
+                                    $Session=Get-DarkSessionInfo -SessionIdentifier $this.SessionID
+                                    if(($script:GPLogSessions -ne $null) -and ($script:GPLogSessions.SessionID -contains $this.SessionID)){
+                                        $Session=$script:GPLogSessions[$this.SessionID]
+                                    } 
+                                    #>
+                                    $Session=Get-DarkSessionInfo -SessionIdentifier $this.SessionID
+                                    return $Session
+                                }
+                            LogType           = $LogType
+                            LogName           = $LogName
+                            FilePath          = $FilePath
+                            FileDirectory     = $LogDir
+                            AppendBehavior    = $AppendOnly
+                            OverwriteBehavior = (-Not $AppendOnly)
+                        }
+                        #$script:GPLogSessions[$script:GPLogSessionID].LogList.Add($LogName, $LogObject)
+                        (Get-DarkSessionInfo).LogList.Add($LogName, $LogObject)
+                    #endregion
+                    #$Success = $true
+                } catch {
+                    #$Success = $false
+                    throw $_
+                }
+            }
+            #return $Success
+        }
+        <#
         function New-DarkSessionLog{
             #[Alias()]
             [CmdletBinding()]
@@ -537,7 +649,7 @@
                                         "-------------------------------------"
                                         ""
                                     )
-                                $SeperatorLines | %{
+                                $SeperatorLines | ForEach-Object {
                                     $_ | Out-File $FilePath -Force -Append #| Out-Null
                                 }
                             }
@@ -562,8 +674,9 @@
                     throw $_
                 }
             }
-            #return $Success
+            return $Success
         }
+        #>
             function New-DarkSessionID{
                 # Generate unique session identifier and add to session list
                 if(-Not $script:SessionIndex){
@@ -579,7 +692,7 @@
                                     $script:SessionIndex = $_.SessionIndex
                                 }
                 $NewLogSessionID = "{0}:{1}" -f $script:ModuleIdentifier, $($script:SessionIndex.ToString().PadLeft(3, "0"))
-                Remove-Variable -Scope "Script" -Name "SessionIndex" | Out-Null 
+                #Remove-Variable -Scope "Script" -Name "SessionIndex" | Out-Null 
                 return $NewLogSessionID
             }
             function Set-DarkSessionID{
@@ -675,7 +788,7 @@
                             [HashTable]$ParamList
                         )
                         $SessionData=$this.SessionData()
-                        $ParamList.Keys | %{
+                        $ParamList.Keys | ForEach-Object {
                             $Name=$_
                             $Value=$ParamList[$_]
                             $SessionData.LoggingContext.LastMessageParams.PSObject.Properties[$Name].Value = $Value
@@ -815,87 +928,96 @@
                     [Switch] $EnableVerbose
             )
 
-            #region Initialize variables
-                # Set default values for null inputs
-                <#
-                if([String]::IsNullOrWhiteSpace($local:LogOutputDirectory) -or [String]::IsNullOrWhiteSpace($local:LogFileNamePrefix)){
-                    # Retrieve the root call from call stack to generate the default log directory
-                    $local:CallStack=@(Get-PSCallStack)
-                    $local:RootInvocation=$CallStack[($CallStack.Count - 1)]
-                    [String]$local:ScriptFullPath=$RootInvocation.InvocationInfo.MyCommand.Path
-                    if([String]::IsNullOrWhiteSpace($local:LogFileNamePrefix)){
-                        #$LogFileNamePrefix  = $RootInvocation.InvocationInfo.MyCommand.Name
-                        $local:LogFileNamePrefix  = $(Split-Path $local:ScriptFullPath -Leaf)
-                    }
-                    if([String]::IsNullOrWhiteSpace($LogOutputDirectory)){
-                        #$local:LogOutputDirectory = $(Split-Path $local:RootInvocation.ScriptName)
-                        $local:LogOutputDirectory = $(Split-Path $local:ScriptFullPath)
-                    }
-                }
-                #>
-                
-            #endregion
-
-            #region Generate unique session identifier and add to session list
-                $SD=New-DarkSession -LogOutputDirectory $local:LogOutputDirectory -LogFileNamePrefix $local:LogFileNamePrefix -EnableDebug:$EnableDebug -EnableVerbose:$EnableVerbose
-                # Create new variables and initialize values
-                [Boolean]$Success              = $false
-                [String] $ScriptFilePathPrefix = (Join-Path $SD.LoggingPrefs.LogOutputDirectory $SD.LoggingPrefs.LogFileNamePrefix)
-                    $ScriptFilePathPrefix=$ScriptFilePathPrefix.Substring(0, $ScriptFilePathPrefix.LastIndexOf("."))
-                [String] $LogPath_DEBUG        = "{0}_DEBUG.log" -f $ScriptFilePathPrefix
-                [String] $LogPath_ALL          = "{0}.log"       -f $ScriptFilePathPrefix
-                [String] $LogPath_LAST         = "{0}_LAST.log"  -f $ScriptFilePathPrefix
-            #endregion
-
-            # Assume successful from this point on unless error is thrown
+            # Assume successful unless error is thrown
             $Success = $true
 
             try{
-                # Set debug / verbose output settings according to EnableDebug / EnableVerbose flags
-                $global:DebugPreference   = $SD.LoggingPrefs.Debug.Session
-                $global:VerbosePreference = $SD.LoggingPrefs.Verbose.Session
-
-                # Set up log files
-                if($IncludeTranscript.IsPresent){
-                    New-DarkSessionLog -LogName "DarkLog_DEBUG" -FilePath $LogPath_DEBUG
-                    # Attempt to stop any transcripts already running.
-                    try{
-                        Stop-Transcript -InformationAction "SilentlyContinue" -WarningAction "SilentlyContinue"  -ErrorAction "SilentlyContinue" | Out-Null
-                    } catch {
-                        # DO NOTHING
+                #region Initialize variables
+                    # Set default values for null inputs
+                    <#
+                    if([String]::IsNullOrWhiteSpace($local:LogOutputDirectory) -or [String]::IsNullOrWhiteSpace($local:LogFileNamePrefix)){
+                        # Retrieve the root call from call stack to generate the default log directory
+                        $local:CallStack=@(Get-PSCallStack)
+                        $local:RootInvocation=$CallStack[($CallStack.Count - 1)]
+                        [String]$local:ScriptFullPath=$RootInvocation.InvocationInfo.MyCommand.Path
+                        if([String]::IsNullOrWhiteSpace($local:ScriptFullPath)){
+                            $local:ScriptFullPath = "{0}." -f (Join-Path $env:tmp $PID)
+                        }
+                        if([String]::IsNullOrWhiteSpace($local:LogFileNamePrefix)){
+                            #$LogFileNamePrefix  = $RootInvocation.InvocationInfo.MyCommand.Name
+                            $local:LogFileNamePrefix  = $(Split-Path $local:ScriptFullPath -Leaf)
+                        }
+                        if([String]::IsNullOrWhiteSpace($LogOutputDirectory)){
+                            #$local:LogOutputDirectory = $(Split-Path $local:RootInvocation.ScriptName)
+                            $local:LogOutputDirectory = $(Split-Path $local:ScriptFullPath)
+                        }
                     }
-                    # Start the transcript
-                    Start-Transcript -Path $LogPath_DEBUG -Append:$false -Force:$true | Out-Null
-                }
-                if($LogAll.IsPresent){
-                    New-DarkSessionLog -LogName "DarkLog_All"  -FilePath $LogPath_ALL  -AppendOnly
-                }
-                if($LogLast.IsPresent){
-                    New-DarkSessionLog -LogName "DarkLog_Last"  -FilePath $LogPath_LAST
-                }
-                #if($PSCmdlet.ParameterSetName -like "Transcript*"){
-                #    New-DarkSessionLog -LogName "DarkLog_All"  -FilePath $LogPath_ALL  -AppendOnly
-                #    New-DarkSessionLog -LogName "DarkLog_Last" -FilePath $LogPath_LAST
-                #} 
+                    #>
+                #endregion
+
+                #region Generate unique session identifier and add to session list
+                    $SD=New-DarkSession -LogOutputDirectory $local:LogOutputDirectory -LogFileNamePrefix $local:LogFileNamePrefix -EnableDebug:$EnableDebug -EnableVerbose:$EnableVerbose
+                    # Create new variables and initialize values
+                    #[Boolean]$Success              = $false
+                    [String] $ScriptFilePathPrefix = (Join-Path $SD.LoggingPrefs.LogOutputDirectory $SD.LoggingPrefs.LogFileNamePrefix)
+                        $ScriptFilePathPrefix=$ScriptFilePathPrefix.Substring(0, $ScriptFilePathPrefix.LastIndexOf("."))
+                    [String] $LogPath_DEBUG        = "{0}_DEBUG.log" -f $ScriptFilePathPrefix
+                    [String] $LogPath_ALL          = "{0}.log"       -f $ScriptFilePathPrefix
+                    [String] $LogPath_LAST         = "{0}_LAST.log"  -f $ScriptFilePathPrefix
+                #endregion
             } catch {
-                Handle-Exception-Internal -ErrorObject $_
                 $Success = $false
+                Handle-Exception-Internal -ErrorObject $_
             }
-            
+
+            if($Success){
+                try{
+                    # Set debug / verbose output settings according to EnableDebug / EnableVerbose flags
+                    $global:DebugPreference   = $SD.LoggingPrefs.Debug.Session
+                    $global:VerbosePreference = $SD.LoggingPrefs.Verbose.Session
+
+                    # Set up log files
+                    if($IncludeTranscript.IsPresent){
+                        New-DarkSessionLog -LogName "DarkLog_DEBUG" -FilePath $LogPath_DEBUG
+                        # Attempt to stop any transcripts already running.
+                        try{
+                            Stop-Transcript -InformationAction "SilentlyContinue" -WarningAction "SilentlyContinue"  -ErrorAction "SilentlyContinue" | Out-Null
+                        } catch {
+                            # DO NOTHING
+                        }
+                        # Start the transcript
+                        Start-Transcript -Path $LogPath_DEBUG -Append:$false -Force:$true | Out-Null
+                    }
+                    if($LogAll.IsPresent){
+                        New-DarkSessionLog -LogName "DarkLog_All"  -FilePath $LogPath_ALL  -AppendOnly
+                    }
+                    if($LogLast.IsPresent){
+                        New-DarkSessionLog -LogName "DarkLog_Last"  -FilePath $LogPath_LAST
+                    }
+                    #if($PSCmdlet.ParameterSetName -like "Transcript*"){
+                    #    New-DarkSessionLog -LogName "DarkLog_All"  -FilePath $LogPath_ALL  -AppendOnly
+                    #    New-DarkSessionLog -LogName "DarkLog_Last" -FilePath $LogPath_LAST
+                    #} 
+                } catch {
+                    $Success = $false
+                    Handle-Exception-Internal -ErrorObject $_
+                }
+            }
+
             Write-DarkLog -MessagePrefix "" -Message " ************************"
             Write-DarkLog -MessagePrefix "" -Message " * # Process started.  # "
 
             return $Success
         }
         function Stop-DarkSession {
-            [alias("Stop-DarkSession")]
+            #[alias()]
             [CmdletBinding()]
             [OutputType([String[]])]
             param()
 
             $SessionData = $script:DarkLogSessions[$script:DarkLogSessionID]
             #$SessionData = (Get-DarkSessionInfo)
-            [String[]] $ReturnFileList = ($SessionData.LogList | Select-Object FilePath).FilePath
+            #[String[]] $ReturnFileList = ($SessionData.LogList | Select-Object FilePath).FilePath
 
             # Set debug / verbose output settings back to original values
             $global:DebugPreference   = $SessionData.LoggingPrefs.Debug.Init
