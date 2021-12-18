@@ -4,6 +4,10 @@
 
 #region Custom Pester Functions
     function Import-Pester{
+        param(
+            [String]$MinimumVersion,
+            [Switch]$Update
+        )
         <# Pester v. 3.4.0 installed by default on Windows Server OS and 
         # cannot be updated using the "Update-Module" command.
         # This command will check if any other versions of Pester are installed.
@@ -16,48 +20,136 @@
         $ModuleName    = "Pester"
         $IgnoreVersion = "3.4.0"
 
+        #region Sub-Functions
+            function Get-ImportedModuleMatches{
+                param(
+                    [Parameter(Mandatory = $true)]
+                    [ValidateNotNullOrEmpty()]
+                        [String]$ModuleName,
+                    [Parameter(Mandatory = $false)]
+                        [String]$MinimumVersion = $null,
+                    [Parameter(Mandatory = $false)]
+                        [String]$IgnoreVersion = $null
+                )
+                $CurrentlyImportedModules = @(Get-Module $ModuleName | Sort-Object Version -Descending)
+                if(-Not [String]::IsNullOrWhiteSpace($MinimumVersion)){
+                    $CurrentlyImportedModules = @($CurrentlyImportedModules | Where-Object { $_.Version -ge $MinimumVersion })
+                }
+                if(-Not [String]::IsNullOrWhiteSpace($IgnoreVersion)){
+                    $CurrentlyImportedModules = @($CurrentlyImportedModules | Where-Object { $_.Version -ne $IgnoreVersion })
+                }
+                return $CurrentlyImportedModules
+            }
+            function Get-ImportedModuleMatch{
+                param(
+                    [Parameter(Mandatory = $true)]
+                    [ValidateNotNullOrEmpty()]
+                        [String]$ModuleName,
+                    [Parameter(Mandatory = $false)]
+                        [String]$MinimumVersion = $null,
+                    [Parameter(Mandatory = $false)]
+                        [String]$IgnoreVersion = $null
+                )
+                $LatestMatchingModule = $null
+                $ModuleMatchParams = @{
+                    ModuleName     = $ModuleName
+                    MinimumVersion = $MinimumVersion
+                    IgnoreVersion  = $IgnoreVersion
+                }
+                $CurrentlyImportedModules = Get-ImportedModuleMatches @ModuleMatchParams
+                if($CurrentlyImportedModules.Count -gt 0){
+                    $LatestMatchingModule = $CurrentlyImportedModules[0]
+                }
+                return $LatestMatchingModule
+            }
+            function Get-InstalledModuleMatches{
+                param(
+                    [Parameter(Mandatory = $true)]
+                    [ValidateNotNullOrEmpty()]
+                        [String]$ModuleName,
+                    [Parameter(Mandatory = $false)]
+                        [String]$MinimumVersion = $null,
+                    [Parameter(Mandatory = $false)]
+                        [String]$IgnoreVersion = $null
+                )
+                $CurrentlyInstalledModules = @(
+                    Get-Module -ListAvailable | 
+                        Where-Object { $_.Name -eq $ModuleName } | 
+                            Sort-Object Version -Descending
+                )
+                if(-Not [String]::IsNullOrWhiteSpace($MinimumVersion)){
+                    $CurrentlyInstalledModules = @($CurrentlyImportedModules | Where-Object { $_.Version -ge $MinimumVersion })
+                }
+                if(-Not [String]::IsNullOrWhiteSpace($IgnoreVersion)){
+                    $CurrentlyInstalledModules = @($CurrentlyInstalledModules | Where-Object { $_.Version -ne $IgnoreVersion })
+                }
+                return $CurrentlyImportedModules
+            }
+            function Get-InstalledModuleMatch{
+                param(
+                    [Parameter(Mandatory = $true)]
+                    [ValidateNotNullOrEmpty()]
+                        [String]$ModuleName,
+                    [Parameter(Mandatory = $false)]
+                        [String]$MinimumVersion = $null,
+                    [Parameter(Mandatory = $false)]
+                        [String]$IgnoreVersion = $null
+                )
+                $LatestMatchingModule = $null
+                $ModuleMatchParams = @{
+                    ModuleName     = $ModuleName
+                    MinimumVersion = $MinimumVersion
+                    IgnoreVersion  = $IgnoreVersion
+                }
+                $CurrentlyInstalledModules = Get-InstalledModuleMatches @ModuleMatchParams
+                if($CurrentlyInstalledModules.Count -gt 0){
+                    $LatestMatchingModule = $CurrentlyInstalledModules[0]
+                }
+                return $LatestMatchingModule
+            }
+        #endregion
+        $ModuleMatchParams = @{
+            ModuleName     = $ModuleName
+            MinimumVersion = $MinimumVersion
+            IgnoreVersion  = $IgnoreVersion
+        }
         # Skip process if module is already present
-        if((Get-Module -Name $ModuleName | Where-Object { $_.Version -ne $IgnoreVersion }).Count -eq 0) {
+        $CurrentlyImportedMatch = Get-ImportedModuleMatch @ModuleMatchParams
+        if($null -eq $CurrentlyImportedMatch) {
 
             # Enable TLS 1.2 for current session
             [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 
             # Retrieve list of versions installed other than factory-shipped version.
-            $ManuallyInstalledVersionList = @(
-                    Get-Module -ListAvailable | 
-                        Where-Object { $_.Name -eq $ModuleName -and $_.Version -ne $IgnoreVersion } | 
-                            Sort-Object Version -Descending | 
-                                Select-Object * -First 1
-                )
+            $LatestInstalledVersion = Get-InstalledModuleMatch @ModuleMatchParams
 
             # Install / update depending on results.
-            if($ManuallyInstalledVersionList.Count -eq 0){
+            if($null -eq $LatestInstalledVersion){
                 # No other versions found - install newest release in parallel
                 Install-Module -Name $ModuleName -Force -SkipPublisherCheck
             } else {
-                # Valid version found - update to latest
-                $ManuallyInstalledVersionList[0] | Update-Module -Confirm
+                if($Update){
+                    # Valid version found - update to latest
+                    $ManuallyInstalledVersionList[0] | Update-Module #-Confirm
+                }
             }
 
             # Re-fetch latest installed version for import
-            $ManuallyInstalledVersionList = @(
-                    Get-Module -ListAvailable | 
-                        Where-Object { $_.Name -eq $ModuleName -and $_.Version -ne $IgnoreVersion } | 
-                            Sort-Object Version -Descending | 
-                                Select-Object * -First 1
-                )
+            $LatestInstalledVersion = Get-InstalledModuleMatch @ModuleMatchParams
 
             # Remove any other imported versions from current context
-            Get-Module -Name $ModuleName | Where-Object { $_.Version -ne $ManuallyInstalledVersionList[0].Version } | Remove-Module -Force
+            Get-Module -Name $ModuleName | Where-Object { $_.Version -ne $LatestInstalledVersion.Version } | Remove-Module -Force
 
             # Import specific module
-            Import-Module -Name $ManuallyInstalledVersionList[0].Name -RequiredVersion $ManuallyInstalledVersionList[0].Version -Force
-
+            Import-Module -Name $LatestInstalledVersion.Name -RequiredVersion $LatestInstalledVersion.Version -Force
+            Write-Debug ("Valid module version imported successfully. {0} 'ModuleName': '{2}', 'Version': '{3}' {1}" -f "{", "}", $LatestInstalledVersion.Name, $LatestInstalledVersion.Version)
+            
             # Declare function status a success
             $Success = $true
         } else {
             # Declare function status a success
             $Success = $true
+            Write-Debug ("Valid module version already imported. {0} 'ModuleName': '{2}', 'Version': '{3}' {1}" -f "{", "}", $CurrentlyImportedMatch.Name, $CurrentlyImportedMatch.Version)
         }
 
         # Return function status
@@ -73,21 +165,27 @@
             [ValidateSet(0, 1, 2, 3, 4)]
                 [Int32]$DetailLevel = 1,
             [Parameter(Mandatory = $false)]
-                [Switch]$ObjectOutput
+                [Switch]$PassThru,
+            [Parameter(Mandatory = $false)]
+                [Switch]$SaveResultsToFile,
+            [Parameter(Mandatory = $false)]
+                [Switch]$Force  
         )
         if(Test-Path $Path){
             #region Initialize parameters
-                $PathInfo = Get-Item $Path
+                $Timestamp              = Get-Date
+                $TimestampString        = $Timestamp.ToString('yyyyMMddHHmmss')
+                $PathInfo               = Get-Item $Path
                 #$PathInfo | FL *
                 if($PathInfo.Attributes -contains "Directory"){
                     $TestSourceRootPath = $PathInfo.FullName
-                    $TestSourceName   = (Split-Path $TestSourceRootPath -Leaf)
+                    $TestSourceName     = (Split-Path $TestSourceRootPath -Leaf)
                 } else {
                     $TestSourceRootPath = $PathInfo.Directory
                     $TestSourceName     = $PathInfo.BaseName
                 }
-                $TestFileSuffix = ".Tests"
-                $ModuleName       = $TestSourceName.Replace($TestFileSuffix, "")
+                $TestFileSuffix         = ".Tests"
+                $ModuleName             = $TestSourceName.Replace($TestFileSuffix, "")
                 #$ContainerTempDir = Join-Path $(Join-Path $env:tmp "Pester") $("{0}_{1}" -f $TestSourceName, (Get-Date).ToString("yyyyMMddHHmmss"))
                     #Write-Host "TestSourceRootPath: [$TestSourceRootPath]"
                     #Write-Host "TestSourceName:     [$TestSourceName]"
@@ -137,12 +235,11 @@
                     Run          = @{
                         Path                = $Path
                         Container           = $PesterContainer
-                        PassThru            = $(if($ObjectOutput) { $true } else { $false })
+                        PassThru            = $(if($PassThru) { $true } else { $false })
                         TestExtension       = "$TestFileSuffix.ps1"
                         <#
                         ExcludePath         = @()
                         ScriptBlock         = @()
-                        
                         Exit                = $false
                         Throw               = $false
                         SkipRun             = $false
@@ -168,28 +265,46 @@
                     }
                     #>
                     TestResult  = @{
-                        Enabled                = $(if($ObjectOutput) { $true } else { $false })
-                        <#
+                        Enabled                = $(if($SaveResultsToFile) { $true } else { $false })
                         OutputFormat           = 'NUnitXml'
-                        OutputPath             = 'testResults.xml'
+                        OutputPath             = ('{0}\{1}\TestResults_{2}.xml' -f (Join-Path $PSScriptRoot "_PesterOutput"), $ModuleName, $TimestampString)
+                        <#
                         OutputEncoding         = 'UTF8'
                         TestSuiteName          = 'Pester'
                         #>
                     }
                     Should     = @{
-                        ErrorAction            = "Continue" 
+                        ErrorAction            = $(if($Force){ "Continue" } else { "Stop" }) 
                     }
                     Debug      = @{
                         ShowFullErrors         = $(if($DetailLevel -ge 2) { $true } else { $false })
                         WriteDebugMessages     = $(if($DetailLevel -ge 3) { $true } else { $false }) 
                         <#
+                        ReturnRawResultObject  = $false
                         WriteDebugMessagesFrom = @('Discovery', 'Skip', 'Filter', 'Mock', 'CodeCoverage')
                         ShowNavigationMarkers  = $false
-                        ReturnRawResultObject  = $false
                         #>
                     }
                     Output     = @{
-                        Verbosity              = $(if($DetailLevel -ge 4) { 'Diagnostic' } elseif ($DetailLevel -eq 3) { 'Detailed' } elseif($DetailLevel -le 0) { 'None' } else { 'Normal' })
+                        Verbosity              = $(
+                                switch($DetailLevel){
+                                    {$_ -le 0} {
+                                        'None'
+                                    }
+                                    {1} {
+                                        'Normal'
+                                    }
+                                    {$_ -in @(2, 3)} {
+                                        'Detailed'
+                                    }
+                                    {$_ -ge 4} {
+                                        'Diagnostic'
+                                    }
+                                    default{
+                                        throw "Could not determine Verbosity based on provided DetailLevel. [$DetailLevel]"
+                                    }
+                                }
+                            )
                     }
                 }
             #endregion
@@ -203,10 +318,26 @@
 Push-Location -Path $PSScriptRoot
 if(Import-Pester){
     $UnitTestFileList | ForEach-Object {
-        $PesterConfig = New-PesterRuntimeConfig -Path $_ -DetailLevel 2
+        $PesterConfig = New-PesterRuntimeConfig -Path $_ -SaveResultsToFile -DetailLevel 2 -PassThru
         if($null -ne $PesterConfig){
             Push-Location -Path (Split-Path $_)
-            Invoke-Pester -Configuration $PesterConfig
+            Write-Host "Running pester tests from [$_]"
+            $Results = Invoke-Pester -Configuration $PesterConfig
+            if($Results.Passed.Count -gt 0){
+                Write-Host "  |-Passed Tests:" -ForegroundColor Green
+                $Results.Passed | %{
+                    Write-Host ("  |  |-{0}" -f $_) -ForegroundColor Green
+                }
+                Write-Host ("  |  \") -ForegroundColor Green
+            }
+            if($Results.Result -ne "Passed"){
+                Write-Host "  |-Failed Tests:" -ForegroundColor Red
+                $Results.Failed | %{
+                    Write-Host ("  |  |-{0}" -f $_) -ForegroundColor Red
+                }
+                Write-Host ("  |  \") -ForegroundColor Red
+            }
+            Write-Host "  \"
             Pop-Location
         }
     }

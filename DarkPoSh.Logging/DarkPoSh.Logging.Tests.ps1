@@ -20,15 +20,18 @@ Describe "Validate Module [$($ModuleInfo.Name)]" {
         It "Root module file exists [$($ModuleInfo.Files.RootModule.Name)]" {
             $ModuleInfo.Files.RootModule.Path | Should -Exist
         }
+        #It "Manifest file exists [$($ModuleInfo.Files.ModuleManifest.Name)]" {
+        #    $ModuleInfo.Files.ModuleManifest.Path | Should -Exist
+        #}
         It "Valid manifest file exists [$($ModuleInfo.Files.ModuleManifest.Name)]" {
             $ModuleInfo.Files.ModuleManifest.Path | Should -Exist
-            #$ModuleInfo.Files.ModuleManifest.Path | Should -FileContentMatch $ModuleInfo.Files.RootModule.Name
+            $ModuleInfo.Files.ModuleManifest.Path | Should -FileContentMatch $ModuleInfo.Files.RootModule.Name
         }
     }
     Context "Check module content for errors."{
-        It "Module manifest points to correct RootModule element [$($ModuleInfo.Files.RootModule.Name)]" {
-            $ModuleInfo.Files.ModuleManifest.Path | Should -FileContentMatch $ModuleInfo.Files.RootModule.Name
-        }
+        #It "Module manifest points to correct RootModule element [$($ModuleInfo.Files.RootModule.Name)]" {
+        #    $ModuleInfo.Files.ModuleManifest.Path | Should -FileContentMatch $ModuleInfo.Files.RootModule.Name
+        #}
         It "Module source files contain no errors." {
             $ModuleFileErrorCount = 0
             @(
