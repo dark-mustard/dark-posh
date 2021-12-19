@@ -1,37 +1,82 @@
-
+BeforeDiscovery {
+    #if(($null -eq $global:ModuleInfo) -and ($null -ne $ModuleInfo)){
+    #    $global:ModuleInfo = $ModuleInfo
+    #}
+    #$global:ModuleInfo = $ModuleInfo
+    #Push-Location -Path $ModuleInfo.Directory
+}
 BeforeAll {
-    Push-Location -Path $ModuleInfo.Directory
-
-    #region Cleanly Import Module 
-    #    Get-Module $ModuleName | Remove-Module -Force
-    #    Import-Module $ModuleRootPath -Force
-    #endregion
-
-    #Clear-Host
-}
-AfterAll {
-    Pop-Location
-}
-
-
-
-Describe "Validate Module [$($ModuleInfo.Name)]" {
-    Context "Validate module files exist."{
-        It "Root module file exists [$($ModuleInfo.Files.RootModule.Name)]" {
-            $ModuleInfo.Files.RootModule.Path | Should -Exist
-        }
-        #It "Manifest file exists [$($ModuleInfo.Files.ModuleManifest.Name)]" {
-        #    $ModuleInfo.Files.ModuleManifest.Path | Should -Exist
-        #}
-        It "Valid manifest file exists [$($ModuleInfo.Files.ModuleManifest.Name)]" {
-            $ModuleInfo.Files.ModuleManifest.Path | Should -Exist
-            $ModuleInfo.Files.ModuleManifest.Path | Should -FileContentMatch $ModuleInfo.Files.RootModule.Name
+    #if(($null -eq $global:ModuleInfo) -and ($null -ne $ModuleInfo)){
+    #    $global:ModuleInfo = $ModuleInfo
+    #}
+    #Push-Location -Path $ModuleInfo.Directory
+    
+    #$global:ModuleInfo.Exports.Functions.StartSession.Name | ForEach-Object {
+    #    $FunctionName = $global:ModuleInfo.Exports.Functions.StartSession.Name
+    #    $FunctionInfo = $global:ModuleInfo.Exports.Functions[$FunctionName]
+    #    $FunctionInfo.ValidParameterSets
+    #}
+    if($ModuleInfo.PSObject.Properties.Name -notcontains "Exports"){
+        $ModuleInfo | Add-Member -MemberType NoteProperty -Name "Exports" -Value $null
+    } 
+    $ModuleInfo.Exports = [PSCustomObject]@{
+        Functions = [PSCustomObject]@{
+            StartSession = [PSCustomObject]@{
+                Name = "Start-DarkSession"
+                ValidParameterSets = @(
+                    @{ LogLast = $true }
+                    @{ LogAll = $true }
+                    @{ IncludeTranscript = $true }
+                    @{ LogAll = $true; LogLast = $true }
+                    @{ LogAll = $true; IncludeTranscript = $true }
+                    @{ LogLast = $true; IncludeTranscript = $true }
+                    @{ LogAll = $true; LogLast = $true; IncludeTranscript = $true }
+                )
+            }
+            StopSession  = [PSCustomObject]@{
+                Name = "Stop-DarkSession"
+                ValidParameterSets = @()
+            }
+            WriteLog     = [PSCustomObject]@{
+                Name = "Write-DarkLog"
+                ValidParameterSets = @()
+            }
         }
     }
-    Context "Check module content for errors."{
-        #It "Module manifest points to correct RootModule element [$($ModuleInfo.Files.RootModule.Name)]" {
+    # Get list of exported functions:
+    #$global:ModuleInfo.Exports.Functions.PSObject.Properties.Value.Name
+
+    #$global:ModuleInfo.Exports.Functions.StartSession.Name
+    #$global:ModuleInfo.Exports.Functions.StartSession.ValidParameterSets
+
+
+    #region Cleanly Import Module 
+    #    Get-Module $ModuleInfo.Name | Remove-Module -Force
+    #    Import-Module $ModuleInfo.Directory -Force
+    #endregion
+}
+AfterAll {
+    #Remove-Variable -Scope Global -Name "ModuleInfo"
+    #Pop-Location
+}
+
+Describe "Validate Module [$($global:ModuleInfo.Name)]" {
+    Context "Validate module files exist."{
+        It ("Root module file exists [$($global:ModuleInfo.Files.RootModule.Name)]") {
+            $ModuleInfo.Files.RootModule.Path | Should -Exist
+        }
+        It "Manifest file exists [$($ModuleInfo.Files.ModuleManifest.Name)]" {
+            $ModuleInfo.Files.ModuleManifest.Path | Should -Exist
+        }
+        It "Module manifest points to correct RootModule element [$($ModuleInfo.Files.RootModule.Name)]" {
+            $ModuleInfo.Files.ModuleManifest.Path | Should -FileContentMatch $ModuleInfo.Files.RootModule.Name
+        }
+        #It "Valid manifest file exists [$($global:ModuleInfo.Files.ModuleManifest.Name)]" {
+        #    $ModuleInfo.Files.ModuleManifest.Path | Should -Exist
         #    $ModuleInfo.Files.ModuleManifest.Path | Should -FileContentMatch $ModuleInfo.Files.RootModule.Name
         #}
+    }
+    Context "Check module content for errors."{
         It "Module source files contain no errors." {
             $ModuleFileErrorCount = 0
             @(
@@ -49,20 +94,49 @@ Describe "Validate Module [$($ModuleInfo.Name)]" {
     }
 }
 <#
-$ValidParemeterSets_StartSession_LogFileOptions=@(
-    @{ LogLast = $true }
-    @{ LogAll = $true }
-    @{ IncludeTranscript = $true }
-    @{ LogAll = $true; LogLast = $true }
-    @{ LogAll = $true; IncludeTranscript = $true }
-    @{ LogLast = $true; IncludeTranscript = $true }
-    @{ LogAll = $true; LogLast = $true; IncludeTranscript = $true }
-)
-$ValidParemeterSets_StartSession=@()
-$ValidParemeterSets_StartSession_LogFileOptions | ForEach-Object {
-    $ValidParemeterSets_StartSession+=,$_
-    #$script:ValidParemeterSets_StartSession.Add($_, $scriptValidParemeterSets_StartSession_LogFileOptions[$_])
+Describe "Validate Session Start / Stop" {
+    $ValidParameterSets = @(
+        @{ LogLast = $true }
+        @{ LogAll = $true }
+        @{ IncludeTranscript = $true }
+        @{ LogAll = $true; LogLast = $true }
+        @{ LogAll = $true; IncludeTranscript = $true }
+        @{ LogLast = $true; IncludeTranscript = $true }
+        @{ LogAll = $true; LogLast = $true; IncludeTranscript = $true }
+    )
+    #foreach ($ParamList in $global:ModuleInfo.Exports.Functions.StartSession.ValidParameterSets) {
+    foreach ($ParamList in $ValidParameterSets) {
+        Context ("Validate Start / Stop session parameter set: {0}" -f $($ParamList | ConvertTo-Json -Compress)){
+            
+            $Result = Start-DarkSession @ParamList
+
+            It "should return $true" {
+                $Result | Should -Be $true
+            }
+
+            $OutputFileList = $null
+            if($Result){
+                $OutputFileList = Stop-DarkSession
+            }
+
+            It "Stop-DarkSession should return non-null string with log files generated" {
+                [String]::IsNullOrWhiteSpace($OutputFileList) | Should -Be $false 
+            }   
+
+            $OutputFileList = $OutputFileList.Split(",")
+
+            It "Stop-DarkSession should return non-null string with log files generated" {
+                # Number of files included should correspond to the number of log switches are included
+                $OutputFileList.Count | Should -Be $ParamList.Keys.Count
+            }
+
+        }
+    }
+    
 }
+#>
+<#
+
 Describe "Start-DarkSession / Stop-DarkSession" {
     #Context "when a valid parameter set is provided to Start-DarkSession" {
 $ValidParemeterSets_StartSession_LogFileOptions | ForEach-Object {

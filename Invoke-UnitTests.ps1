@@ -320,24 +320,39 @@ if(Import-Pester){
     $UnitTestFileList | ForEach-Object {
         $PesterConfig = New-PesterRuntimeConfig -Path $_ -SaveResultsToFile -DetailLevel 2 -PassThru
         if($null -ne $PesterConfig){
-            Push-Location -Path (Split-Path $_)
-            Write-Host "Running pester tests from [$_]"
+            Write-Host "*Running pester tests from [" -NoNewLine; Write-Host $_ -ForegroundColor Blue -NoNewLine; Write-host "]";
+            
+            # Creates Global variable equal to $ModuleInfo to make it available during discovery 
+            # (allows variable to be used in "Describe", "Context" and "It" declarations)
+            $global:ModuleInfo = $PesterConfig.Run.Container.Value.Data["ModuleInfo"]
+            
+            # Change directory to Module directory
+            Push-Location -Path $ModuleInfo.Directory
+            
+            # Run tests
             $Results = Invoke-Pester -Configuration $PesterConfig
+
+            # Display details
             if($Results.Passed.Count -gt 0){
-                Write-Host "  |-Passed Tests:" -ForegroundColor Green
-                $Results.Passed | %{
-                    Write-Host ("  |  |-{0}" -f $_) -ForegroundColor Green
+                Write-Host "  |-" -NoNewline; Write-Host "Passed Tests:" -ForegroundColor Green;
+                $Results.Passed | ForEach-Object {
+                    Write-Host "  |  |-" -NoNewline; Write-Host $_ -ForegroundColor Green;
                 }
-                Write-Host ("  |  \") -ForegroundColor Green
+                Write-Host ("  |  \") 
             }
-            if($Results.Result -ne "Passed"){
-                Write-Host "  |-Failed Tests:" -ForegroundColor Red
-                $Results.Failed | %{
-                    Write-Host ("  |  |-{0}" -f $_) -ForegroundColor Red
+            if(($Results.Result -ne "Passed") -and ($Results.Failed.Count -gt 0)){
+                Write-Host "  |-" -NoNewline; Write-Host "Failed Tests:" -ForegroundColor Red;
+                $Results.Failed | ForEach-Object {
+                    Write-Host "  |  |-" -NoNewline; Write-Host $_ -ForegroundColor Red;
                 }
-                Write-Host ("  |  \") -ForegroundColor Red
+                Write-Host ("  |  \")
             }
             Write-Host "  \"
+
+            # Clean up global variable
+            Remove-Variable -Scope Global -Name "ModuleInfo"
+
+            # Change directory back to local script directory
             Pop-Location
         }
     }
