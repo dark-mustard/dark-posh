@@ -2,10 +2,11 @@
 
     # Generate id value unique to module import context
     #New-Variable -Scope Script -Visibility Private -Name "VariableVisibility" -Value "Private"
-        New-Variable -Scope Script -Visibility Public -Name "VariableVisibility" -Value "Public"
+        New-Variable -Scope Script -Visibility Private -Name "VariableVisibility" -Value "Public"
     New-Variable -Scope Script -Visibility $script:VariableVisibility -Name "ModuleIdentifier" -Value $((New-Guid).Guid.Replace("-", ""))
-    New-Variable -Scope Script -Visibility $script:VariableVisibility -Name "ModuleErrors" -Value @()
     New-Variable -Scope Script -Visibility $script:VariableVisibility -Name "DarkLogSessions" -Value @{}
+    New-Variable -Scope Script -Visibility $script:VariableVisibility -Name "ModuleErrors" -Value @()
+
     function LogSessionData{
         param(
             $SessionData = $(Get-DarkSessionInfo)
@@ -33,17 +34,19 @@
 #region DarkPoSh.Logging
     #region Logging / Output formatting
         enum DarkLogMessageLevel{
-            Verbose = 0
-            Debug = 1
+            Verbose     = 0
+            Debug       = 1
             Information = 2
-            Warning = 3
-            Error = 4
+            Warning     = 3
+            Error       = 4
+            Success     = 5
+            Failure     = 6
         }
-        enum DarkLogMessageType{
-            Generic = 0
-            Success = 1
-            Failure = 2
-        }
+        #enum DarkLogMessageType{
+        #    Generic = 0
+        #    Success = 1
+        #    Failure = 2
+        #}
         function Write-DarkLog {
             [Alias("New-DarkLogMessage")]
             [CmdletBinding()]
@@ -52,9 +55,24 @@
                 [String] $MessagePrefix = $null,
                 [Nullable[DarkLogMessageLevel]] $MessageLevel = $null,
                 [Nullable[ConsoleColor]] $MessageColor = $null,
-                [Nullable[DarkLogMessageType]] $MessageType = $null,
+                #[Nullable[DarkLogMessageType]] $MessageType = ([DarkLogMessageType]::Generic),
                 [Switch] $ConsoleOnly
             )
+
+            #region Sub-Functions
+                function New-MessageFragment{
+                    param(
+                        [String]$MessageFragment,
+                        [Nullable[ConsoleColor]]$ForegroundColor = $null,
+                        [Nullable[ConsoleColor]]$BackgroundColor = $null
+                    )
+                    return [PSCustomObject]@{
+                        MessageFragment = $MessageFragment
+                        ForegroundColor = $ForegroundColor
+                        BackgroundColor = $BackgroundColor
+                    }
+                }
+            #endregion
 
             # Pull "Last Run" values (if they exist) in the event of a null settings param
             $SD=$script:DarkLogSessions[$script:DarkLogSessionID]
@@ -63,7 +81,7 @@
                 MessagePrefix = $LC.LastMessageParams.MessagePrefix
                 MessageLevel = $LC.LastMessageParams.MessageLevel
                 MessageColor = $LC.LastMessageParams.MessageColor
-                MessageType = $LC.LastMessageParams.MessageType
+                #MessageType = $LC.LastMessageParams.MessageType
                 ConsoleOnly = $LC.LastMessageParams.ConsoleOnly
             }
             if(-Not $LC.FirstMessageReceived){
@@ -104,6 +122,8 @@
                     [Nullable[ConsoleColor]] $DEFAULT_Color_Information = $DEFAULT_Color
                     [Nullable[ConsoleColor]] $DEFAULT_Color_Warning     = [ConsoleColor]::Yellow
                     [Nullable[ConsoleColor]] $DEFAULT_Color_Error       = [ConsoleColor]::Red
+                    [Nullable[ConsoleColor]] $DEFAULT_Color_Success     = [ConsoleColor]::White
+                    [Nullable[ConsoleColor]] $DEFAULT_Color_Failure     = [ConsoleColor]::White
                 #endregion
                 #region Dependent (Non-Customizable) Values
                     #region Dictionaries
@@ -113,6 +133,8 @@
                             ([DarkLogMessageLevel]::Information) = "INFO"
                             ([DarkLogMessageLevel]::Warning)     = "WARNING"
                             ([DarkLogMessageLevel]::Error)       = "ERROR"
+                            ([DarkLogMessageLevel]::Failure)     = "FAILURE"
+                            ([DarkLogMessageLevel]::Success)     = "SUCCESS"
                         }
                         $DICT_MessageAdditionalPrefixColors=@{
                             ([DarkLogMessageLevel]::Verbose)     = $DEFAULT_Color_Verbose
@@ -120,6 +142,8 @@
                             ([DarkLogMessageLevel]::Information) = $DEFAULT_Color
                             ([DarkLogMessageLevel]::Warning)     = $DEFAULT_Color
                             ([DarkLogMessageLevel]::Error)       = $DEFAULT_Color
+                            ([DarkLogMessageLevel]::Failure)     = $DEFAULT_Color
+                            ([DarkLogMessageLevel]::Success)     = $DEFAULT_Color
                         }
                         $DICT_LogMessageLevelColors=@{
                             ([DarkLogMessageLevel]::Verbose)     = $DEFAULT_Color_Verbose
@@ -128,8 +152,24 @@
                             ([DarkLogMessageLevel]::Information) = $DEFAULT_Color_Information
                             ([DarkLogMessageLevel]::Warning)     = $DEFAULT_Color_Warning
                             ([DarkLogMessageLevel]::Error)       = $DEFAULT_Color_Error
+                            ([DarkLogMessageLevel]::Failure)     = $DEFAULT_Color_Failure
+                            ([DarkLogMessageLevel]::Success)     = $DEFAULT_Color_Success
                         }
+
+                        $DICT_LogMessageLevelBackgeoundColors=@{
+                            ([DarkLogMessageLevel]::Verbose)     = $null
+                            ([DarkLogMessageLevel]::Debug)       = $null
+                            ([DarkLogMessageLevel]::Information) = $null
+                            ([DarkLogMessageLevel]::Warning)     = $null
+                            ([DarkLogMessageLevel]::Error)       = $null
+                            ([DarkLogMessageLevel]::Failure)     = [ConsoleColor]::DarkRed
+                            ([DarkLogMessageLevel]::Success)     = [ConsoleColor]::DarkGreen
+                        }
+
                     #endregion
+                    
+                    
+
                     if($null -eq $MessageLevel){
                         switch($Message.GetType().ToString()){
                             ("System.Management.Automation.ErrorRecord"){ 
@@ -148,7 +188,8 @@
                             }
                         }
                     }
-                    [Nullable[ConsoleColor]] $LogMessageLevelColor      = $DICT_LogMessageLevelColors[$MessageLevel]
+                    [Nullable[ConsoleColor]] $LogMessageLevelColor           = $DICT_LogMessageLevelColors[$MessageLevel]
+                    [Nullable[ConsoleColor]] $LogMessageLevelBackgroundColor = $DICT_LogMessageLevelBackgeoundColors[$MessageLevel]
                 #endregion
                 #region Function-Specific Initialized Values
                     [Boolean]                $DisplayMessage            = $false
@@ -198,20 +239,10 @@
                 #endregion
                 #region Decide whether or not to display the message
                     <###############################################################################
-                        # All messages will be displayed without evaluation except for following message levels:
-                        #   1) [DarkLogMessageLevel]::Debug
-                        #   2) [DarkLogMessageLevel]::Verbose
-                        # Below are the requirements necessary to display a message based on it's corresponding message level:
-                        #   ----------------------------------------------------------------------------
-                        #   | Message Level                  | Requirements to Display                 |
-                        #   ----------------------------------------------------------------------------
-                        #   | [DarkLogMessageLevel]::Debug       | $DebugPreference must equal "Continue"   |
-                        #   | [DarkLogMessageLevel]::Verbose     | $VerbosePreference must equal "Continue" |
-                        #   | [DarkLogMessageLevel]::Information | (n/a)                                    |
-                        #   | [DarkLogMessageLevel]::Warning     | (n/a)                                    |
-                        #   | [DarkLogMessageLevel]::Error       | (n/a)                                    |
-                        #   -----------------------------------------------------------------------------
-                        ###############################################################################>
+                    # All messages will be displayed without evaluation except for following message levels:
+                    #   1) [DarkLogMessageLevel]::Debug
+                    #   2) [DarkLogMessageLevel]::Verbose
+                    ###############################################################################>
                     switch($LogMessageLevel){
                         ([DarkLogMessageLevel]::Debug){
                             if($DebugPreference -eq "Continue"){
@@ -243,6 +274,47 @@
                     }
 
                     # Format and collect message elements in $MessageElements (order-specific hashtable)
+                    $MessageElements=@()
+                    $MessageColor = if($null -ne $MessageColor) { $MessageColor } else { $LogMessageLevelColor }
+                    $MessageBackgroundColor = if($null -ne $MessageBackgroundColor) { $MessageBackgroundColor } else { $LogMessageLevelBackgroundColor }
+                    
+                    $MessagePrefixTimestamp = "$((Get-Date).ToString('yyyy-MM-dd hh:mm:ss')) | "
+                        $MessageElements+=,(New-MessageFragment -MessageFragment $MessagePrefixTimestamp -ForegroundColor $DEFAULT_Color_Delim -BackgroundColor $null ) 
+                    $LogMessageLevelString = "$(('[{0}]' -f $DICT_LogMessageLevelStrings[$MessageLevel]).PadRight(9, ' '))"
+                        $MessageElements+=,(New-MessageFragment -MessageFragment $LogMessageLevelString -ForegroundColor $MessageColor -BackgroundColor $MessageBackgroundColor ) 
+                    $MessageElements+=,(New-MessageFragment -MessageFragment " | " -ForegroundColor $DEFAULT_Color_Delim -BackgroundColor $null)
+                    if($MessagePrefix) {
+                        $MessageElements+=,(New-MessageFragment -MessageFragment $MessagePrefix -ForegroundColor $DICT_MessageAdditionalPrefixColors[$MessageLevel] -BackgroundColor $null )
+                    }
+                    $MessageElements+=,(New-MessageFragment -MessageFragment $MessageString -ForegroundColor $MessageColor -BackgroundColor $MessageBackgroundColor ) 
+                    $CurrentItemIndex = -1
+                    $MessageElements | ForEach-Object {
+                        $MessageFragment = $_
+                        # Display message part with appropriate color
+                        $Msg        = $MessageFragment.MessageFragment
+                        $MsgColor   = $MessageFragment.ForegroundColor
+                        $MsgBGColor = $MessageFragment.BackgroundColor
+                        $CurrentItemIndex += 1
+                        $TotalItemCount   =  $MessageElements.Count
+                        $NoNewLine=if($CurrentItemIndex -eq ($TotalItemCount - 1)){
+                                $false
+                            } else {
+                                $true
+                            }
+                        $Params = @{
+                            "Object"    = $Msg
+                            #"NoNewline" = $NoNewLine
+                        }
+                        if($null -ne $MsgColor) {
+                            $Params.Add("ForegroundColor", $MsgColor)
+                        }
+                        if($null -ne $MsgBGColor){
+                            $Params.Add("BackgroundColor", $MsgBGColor)
+                        }
+                        Write-Host @Params -NoNewline:$NoNewLine
+                        
+                    }
+                    <#
                     $MessageElements=[Ordered]@{}
                     $MessageColor = if($null -ne $MessageColor) { $MessageColor } else { $LogMessageLevelColor }
                     $MessagePrefixTimestamp = "$((Get-Date).ToString('yyyy-MM-dd hh:mm:ss')) | "
@@ -271,6 +343,7 @@
                             Write-Host $Msg -NoNewline:$NoNewLine -ForegroundColor $MsgColor
                         }
                     }
+                    #>
                     if(-Not $ConsoleOnly){
                         # Add to $LogOutputMessageText
                         $LogOutputMessageLines += $MessageElements.Keys -join ""
@@ -471,7 +544,7 @@
                     }
                 } catch {
                     $SessionInfo=$null
-                    #Handle-Exception -ErrorObject $_ #-ConsoleOnly
+                    Handle-Exception-Internal -ErrorObject $_
                 }
                 return $SessionInfo
             }
@@ -760,7 +833,7 @@
                             [PSCustomObject] @{
                                 MessagePrefix = [String] $null
                                 MessageLevel  = [Nullable[DarkLogMessageLevel]] $null
-                                MessageType   = [Nullable[DarkLogMessageType]] $null
+                                #MessageType   = [Nullable[DarkLogMessageType]] $null
                                 MessageColor  = [Nullable[ConsoleColor]] $null
                                 ConsoleOnly   = [Nullable[Boolean]] $null
                             }
@@ -934,7 +1007,7 @@
             try{
                 #region Initialize variables
                     # Set default values for null inputs
-                    <#
+                    #<#
                     if([String]::IsNullOrWhiteSpace($local:LogOutputDirectory) -or [String]::IsNullOrWhiteSpace($local:LogFileNamePrefix)){
                         # Retrieve the root call from call stack to generate the default log directory
                         $local:CallStack=@(Get-PSCallStack)
@@ -956,11 +1029,13 @@
                 #endregion
 
                 #region Generate unique session identifier and add to session list
-                    $SD=New-DarkSession -LogOutputDirectory $local:LogOutputDirectory -LogFileNamePrefix $local:LogFileNamePrefix -EnableDebug:$EnableDebug -EnableVerbose:$EnableVerbose
+                    $SD = New-DarkSession -LogOutputDirectory $local:LogOutputDirectory -LogFileNamePrefix $local:LogFileNamePrefix -EnableDebug:$EnableDebug -EnableVerbose:$EnableVerbose
                     # Create new variables and initialize values
                     #[Boolean]$Success              = $false
                     [String] $ScriptFilePathPrefix = (Join-Path $SD.LoggingPrefs.LogOutputDirectory $SD.LoggingPrefs.LogFileNamePrefix)
-                        $ScriptFilePathPrefix=$ScriptFilePathPrefix.Substring(0, $ScriptFilePathPrefix.LastIndexOf("."))
+                        if($ScriptFilePathPrefix -like "*.*"){
+                            $ScriptFilePathPrefix=$ScriptFilePathPrefix.Substring(0, $ScriptFilePathPrefix.LastIndexOf("."))
+                        }
                     [String] $LogPath_DEBUG        = "{0}_DEBUG.log" -f $ScriptFilePathPrefix
                     [String] $LogPath_ALL          = "{0}.log"       -f $ScriptFilePathPrefix
                     [String] $LogPath_LAST         = "{0}_LAST.log"  -f $ScriptFilePathPrefix
