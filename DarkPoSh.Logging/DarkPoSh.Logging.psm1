@@ -1111,7 +1111,7 @@
             $ReturnFileList=$LogFileList -join ","
             
             # Remove session from session list and cleanup resources
-                $global:LAST_SESSION_DATA=$SessionData
+                #$global:LAST_SESSION_DATA=$SessionData
             $script:DarkLogSessions.Remove($script:DarkLogSessionID)
             Remove-Variable -Scope "Script" -Name "DarkLogSessionID" | Out-Null
                     
@@ -1125,4 +1125,3 @@
         }
     #endregion
 #endregion
-
