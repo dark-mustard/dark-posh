@@ -198,12 +198,11 @@
                 #region Create the $MessageLineArray and conditionally set the $MessageLevel
                     # Create the $MessageLineArray
                     switch($Message.GetType().ToString()){
-                        ("System.Management.Automation.ErrorRecord"){ # Format exception elements into string array and conditionally set $MessageLevel
-                            # Set $MessageLineArray equal to custom array of strings
-                            <###############################################################################
-                                # Formats an "Exception" object into the same format it would be displayed 
-                                # in a console if unhandled.
-                                ###############################################################################>
+                        ("System.Management.Automation.ErrorRecord"){ 
+                            # Formats an "ErrorObject" object into the same format it would be displayed 
+                            # in a console if unhandled.  More specifically:
+                            #  1) Format exception elements into string array and conditionally set $MessageLevel
+                            #  2) Set $MessageLineArray equal to custom array of strings
                             $MessageLineArray = @(
                                 ("The following exception was encountered:")
                                 $Indent=" ! "

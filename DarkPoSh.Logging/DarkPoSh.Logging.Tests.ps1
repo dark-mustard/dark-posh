@@ -6,6 +6,67 @@ BeforeDiscovery {
     #Push-Location -Path $ModuleInfo.Directory
 }
 BeforeAll {
+    . $PSCommandPath.Replace('.Tests.ps1','.ps1')
+    function Get-TestContext{
+        param(
+            [String]$SourcePath = $PSCommandPath
+        )
+        $TestFileSuffixes = @(
+            ".Tests"
+            ".Unit"
+            ".Acceptance"
+        )
+        $Timestamp = Get-Date
+        $PathInfo  = Get-Item $SourcePath
+        #region Sub-Functions
+            function Get-TestContextBaseName{
+                param(
+                    [String]$SourcePath
+                )
+                $BaseName = $SourceName
+                $TestFileSuffixes | ForEach-Object {
+                    $Suffix = (".{0}" -f $($_.Trim(".")))
+                    if($BaseName -like "*$Suffix"){
+                        $BaseName = $BaseName.Replace($Suffix, "")
+                    }
+                }
+                return $BaseName
+            }
+        #endregion
+        $TestContext = ([PSCustomObject]@{
+            Runtime   = [PSCustomObject]@{
+                Timestamp       = $Timestamp
+                TimestampString = $($Timestamp.ToString('yyyyMMddHHmmss'))
+            }
+            Directory = $null
+            BaseName  = $(Get-TestContextBaseName -SourcePath $PathInfo.BaseName)
+            Files = [PSCustomObject]@{
+                RootModule = [PSCustomObject]@{
+                    Name = $("{0}.psm1" -f $ModuleName)
+                    Path = $(Join-Path $SourceDirectory ("{0}.psm1" -f $ModuleName))
+                }
+                ModuleManifest = [PSCustomObject]@{
+                    Name = $("{0}.psd1" -f $ModuleName)
+                    Path = $(Join-Path $SourceDirectory ("{0}.psd1" -f $ModuleName))
+                }
+            }
+        })
+        
+        
+        $TimestampString         = $Timestamp.ToString('yyyyMMddHHmmss')
+        
+        if($PathInfo.Attributes -contains "Directory"){
+            $TestContext.Directory = $PathInfo.FullName
+            $SourceName      = (Split-Path $PSCommandPath -Leaf)
+        } else {
+            $TestContext.Directory = $PathInfo.Directory
+            $SourceName      = $PathInfo.BaseName
+        }
+        
+        $TestContext.BaseName = 
+        
+    }
+    
     #if(($null -eq $global:ModuleInfo) -and ($null -ne $ModuleInfo)){
     #    $global:ModuleInfo = $ModuleInfo
     #}
