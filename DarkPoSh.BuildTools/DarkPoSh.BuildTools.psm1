@@ -1,5 +1,72 @@
 ﻿# DarkPoSh.BuildTools
 #region Local Module Management
+    #region Module Functions
+        function _Initialize-Module{
+            throw "Not implemented."
+        }
+        function _Dispose-Module{
+            throw "Not implemented."
+        }
+        function _Handle-Exception{
+            [CmdletBinding()]
+            #[Alias('')]
+            param(
+                [Parameter(Mandatory, ValueFromPipelineByPropertyName)]
+                [Object]
+                    $Message,
+                [Parameter(ValueFromPipelineByPropertyName)]
+                [object]
+                    $AdditionalData,
+                [Parameter(ValueFromPipelineByPropertyName)]
+                [Switch]
+                    $Throw
+            )
+            $ErrorObject  = $null
+
+            switch ($Message.GetType().Name ) {
+                "String" {
+                    #$ErrorObject = [ModuleException]::Create($Message, $CallStack, $LastFunction, $AdditionalData)
+                    try { $Message } catch { $ErrorObject = $_ }
+                }
+                "ErrorRecord" {
+                    $ErrorObject = $Message
+                }
+                default { 
+                    throw ("Unhandled parameter set encountered. {0} 'Function':'{2}', 'ParameterSetName':'{3}' {1}" -f "[", "}", $MyInvocation.MyCommand.Name, $PsCmdlet.ParameterSetName)
+                }
+            }
+
+            if($null -ne $ErrorObject){
+                # Add to session info object
+                $script:ModuleInfo.Errors+=,$ErrorObject
+
+                # Throw? or just Display?
+                if($Throw){
+                    throw $ErrorObject
+                } else {
+                    $MessageLineArray = @(
+                        ("The following exception was encountered:")
+                        $Indent=" ! "
+                        ("{0}{1} : {2}" -f $Indent, $ErrorObject.InvocationInfo.InvocationName, $ErrorObject.Exception.Message)
+                        @($ErrorObject.InvocationInfo.PositionMessage.Split([Environment]::NewLine).Where({ -Not [String]::IsNullOrWhiteSpace($_) })) | ForEach-Object{
+                            ("{0}{1}" -f $Indent, $_)
+                        }
+                        ("{0}    + CategoryInfo          : {1}" -f $Indent, $ErrorObject.CategoryInfo.ToString())
+                        ("{0}    + FullyQualifiedErrorId : {1}" -f $Indent, $ErrorObject.FullyQualifiedErrorId.ToString())
+                    )
+                    $MessageLineArray | ForEach-Object {
+                        Write-Error ($MessageLineArray -join [Environment]::NewLine)
+                    }
+                }
+            }
+        }
+    #endregion
+    #region Module Events
+        $ExecutionContext.SessionState.Module.OnRemove = {
+            _Dispose-Module
+        }
+    #endregion
+#endregion
 #region Custom Functions
     #region Certificates and Signing
         function New-EncryptionCert{
