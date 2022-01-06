@@ -1,6 +1,10 @@
 ﻿# DarkPoSh.BuildTools
+#region Local Module Management
 #region Custom Functions
     #region Certificates and Signing
+        function New-EncryptionCert{
+            throw "Not implemented. [Get-EncryptionCert]"
+        }
         function New-DarkCertificate{
             [CmdletBinding()]
             param(
@@ -266,6 +270,8 @@
                 #>
             }
         }
+    #endregion
+    #region Version Control / Backup
         function Backup-DarkScript{
             throw "Not implemented."
         }
@@ -288,6 +294,211 @@
             Write-Debug " \"
             #>
         }
+    #endregion
+    #region Config File MGMT
+        <#
+        hidden [void] DumpToFile($FilePath, $Content) {
+            $FileDir = Split-Path $FilePath
+            if (!(Test-Path $FileDir)) {
+                New-Item -Path $FileDir -ItemType Directory -Force
+            }
+            $EncryptionCert = $this.GetEncryptionCert()
+            $ContentType = $Content.GetType()
+            Switch ($ContentType) {
+                pscredential { 
+                    $Content | Export-CliXml -Path "$FilePath.tmp"
+                    Get-Content -Path "$FilePath.tmp" | Protect-CmsMessage -To $EncryptionCert -OutFile $FilePath
+                    Remove-Item -Path "$FilePath.tmp" -Force
+                }
+                default { 
+                    $Content | Protect-CmsMessage -To $EncryptionCert -OutFile $FilePath 
+                }
+            }
+        }
+        hidden [void] LoadCachedCredentials() {
+            [System.Management.Automation.PSCredential] $Creds = $null
+            $FileName = $this.CredsCachePath
+            if(Test-Path $FileName){
+                $FileNameTemp = "$FileName.tmp"
+                try{
+                    Unprotect-CmsMessage -Path $FileName | Out-File $FileNameTemp
+                    $this.APICreds = Import-CliXml -Path $FileNameTemp
+                    Write-Debug "[Loaded cached credentials]"
+                } catch {
+                    $_
+                } finally {
+                    if (Test-Path $FileNameTemp) {
+                        #Write-Host "Delete temp file. [$FileNameTemp]"
+                        Remove-Item -Path $FileNameTemp -Force
+                    }
+                }
+            } else {
+                $this.RequestAPICreds()
+            }
+        }
+        #>
+        function New-SettingsFile{
+            param(
+                [String]$OutputFilePath,
+                [Switch]$Encrypt
+            )
+
+            $ScriptSettings=[PSCustomObject]@{
+                AppName = $null
+                ADSyncTargets = @{}
+                Exclusions = @()
+            }
+
+            #region Sub-functions
+                function Get-ParamValue{
+                    param(
+                        [String]$Prefix = "",
+                        [String]$ParamName,
+                        [Switch]$Required
+                    )
+                    $ParamValue = Read-Host -Prompt ("{0}[{1}]" -f $Prefix, $ParamName)
+                    if($Required -and [String]::IsNullOrWhiteSpace($ParamValue)){
+                        Write-Host "** This value is required - please try again. **" -ForegroundColor Red
+                        $ParamValue = Get-ParamValue $ParamName -Required:$Required
+                    }
+                    return $ParamValue
+                }
+                function Get-ParamArray{
+                    param(
+                        [String]$Prefix = "",
+                        [String]$ParamName,
+                        [Int32]$MinCountRequired = 0
+                    )
+                    $Continue = $true
+                    $Values=@()
+                    while($Continue) {
+                        $ParamValue = Read-Host -Prompt ("{0}[{1}({2})]" -f $Prefix, $ParamName, $Values.Count)
+                        if([String]::IsNullOrWhiteSpace($ParamValue)){
+                            if($Values.Count -lt $MinCountRequired){
+                                # REPROMPT
+                                Write-Host ("** At least {0} value{1} required - please try again. **" -f $MinCountRequired, $(if($MinCountRequired -gt 1){ "s are" } else { " is" })) -ForegroundColor Red
+                                $Values=Get-ParamArray -Prefix $Prefix -ParamName $ParamName -MinCountRequired:$MinCountRequired
+                                $Continue = $false
+                            } else {
+                                # FINISHED
+                                $Continue = $false
+                            }
+                        } else {
+                            $Values += $ParamValue
+                        }
+                    } 
+                    return $Values
+                }
+            #endregion
+
+            Write-Host "###############################"
+            Write-Host "## " -NoNewline; Write-Host "Application Sync Settings" -ForegroundColor Green -NoNewline;
+            Write-Host "###############################"
+            #---------------
+            Write-Host "# Specify application name and choose a path to save output file. " 
+            # Prompt for $AppName if invalid / not specified
+            $ScriptSettings.AppName = Get-ParamValue -Prefix "#   |-" -ParamName "AppName" -Required
+            # Prompt for destination path if invalid / not specified
+            if([String]::IsNullOrWhiteSpace($OutputFilePath)){
+                #Write-Host "# Please provide the desired output file path."
+                $SaveChooser = New-Object -Typename System.Windows.Forms.SaveFileDialog
+                $SaveChooser.InitialDirectory = $PSScriptRoot
+                $SaveChooser.Filter = "Xml files (*.xml)|*.txt|All files (*.*)|*.*"
+                $SaveChooser.ShowDialog()
+                $OutputFilePath=$SaveChooser.Filename
+                while([String]::IsNullOrWhiteSpace($OutputFilePath)){
+                    Write-Host "** This value is required - please try again. **" -ForegroundColor Red
+                    $SaveChooser.ShowDialog()
+                    $OutputFilePath=$SaveChooser.Filename
+                }
+            }
+            Write-Host "#   |-[Output Path]: $OutputFilePath"
+            Write-Host "#   \"
+            #---------
+            <#
+            Write-Host "# Specify ADSync TARGET group names to syncronize. " # -NoNewline
+            $ADSyncTargetList = Get-ParamArray -Prefix "#   |-"  -ParamName "ADSyncTarget" -MinCountRequired 1
+            Write-Host "#   \"
+            $ADSyncTargetList | %{
+                #----
+                $ADSyncTargetName = $_
+                $ADSyncTargetSettings = [PSCustomObject]@{
+                    SyncMembersOf=@()
+                    Exclusions=@()
+                }
+                Write-Host "# Specify ADSync SOURCE group names containg sync-users for [$ADSyncTargetName]"
+                $ADSyncTargetSettings.SyncMembersOf = Get-ParamArray -Prefix "#   |-"   -ParamName "ADSyncSource" -MinCountRequired 1
+                Write-Host "#   \"
+                #-
+                Write-Host "# Specify any exclusions specific to [$ADSyncTargetName]"
+                $ADSyncTargetSettings.Exclusions = Get-ParamArray -Prefix "#   |-"   -ParamName "Exclusion" -MinCountRequired 0
+                Write-Host "#   \"
+                #----
+                $AppSyncSettings.ADSyncTargets.Add($ADSyncTargetName, $ADSyncTargetSettings)
+            }
+            #---------
+            Write-Host "# Add any EXCLUSIONS"
+            $AppSyncSettings.Exclusions = Get-ParamArray -Prefix "#   |-" -ParamName "Exclusion"
+            Write-Host "#   \"
+            #---------------
+            $AppSyncSettings | Export-Clixml -Path $OutputFilePath
+            #>
+
+            # If $Encrypt is specified, save initial export to a '.tmp' file
+            $OutputFilePath_TMP = "{0}{1}" -f $OutputFilePath, $(if($Encrypt){ ".tmp" } )
+            #--
+            $ExportFile1 = if($Encrypt){ $OutputFilePath_TMP } else { $OutputFilePath }
+            $ExportFile2 = "{0}.cms" -f $OutputFilePath.Substring(0, $OutputFilePath.LastIndexOf("."))
+            #--
+            # Dump settings to file
+            $AppSettings | Export-Clixml -Path $ExportFile1
+            # Encrypt, if specified and remove tmp files
+            if($Encrypt){
+                # Check for existing file encryption certificate
+                Push-Location "Cert:\CurrentUser\My"
+                $DocCerts = @(Get-ChildItem -DocumentEncryptionCert)
+                Pop-Location
+                if($DocCerts.Count -eq 0){
+                    # Request new cert or renew existing
+                    $EncryptionCert = New-EncryptionCert
+                } else {
+                    # Save the encrypted file without a file extension.
+                    Get-Content -Path $ExportFile1 | Protect-CmsMessage -To $EncryptionCert -OutFile $ExportFile2
+                    # Clean-up '.tmp' files.
+                    Remove-Item -Path $ExportFile1 -Force
+                }
+            } 
+        }        
+        function Load-SettingsFile{
+            param(
+                [Parameter(Mandatory=$true)]
+                [ValidateNotNull()]
+                [String]$SettingsFilePath
+            )
+            Write-Host "###############################"
+            Write-Host "## " -NoNewline; Write-Host "Loading Application Sync Settings..." -ForegroundColor Green;
+            Write-Host "###############################"
+            #---------------
+            #if(-Not (Test-Path $SettingsFilePath)){
+            #    Write-Host "# Please provide the desired output file path."
+                #Write-Host "# Please provide the desired output file path."
+                #$LoadChooser = New-Object -Typename System.Windows.Forms.OpenFileDialog
+                #$LoadChooser.InitialDirectory = $PSScriptRoot
+                #$LoadChooser.Filter = "Xml files (*.xml)|*.txt|All files (*.*)|*.*"
+                #$LoadChooser.ShowDialog()
+                #$SettingsFilePath=$LoadChooser.Filename
+                #while([String]::IsNullOrWhiteSpace($OutputFilePath)){
+                #    Write-Host "** This value is required - please try again. **" -ForegroundColor Red
+                #    $SaveChooser.ShowDialog()
+                #    $OutputFilePath=$SaveChooser.Filename
+                #}
+            #}
+            Protect-CmsMessage 
+            $AppSyncSettings=Import-Clixml -Path $SettingsFilePath
+            return $AppSyncSettings
+        }
+    #endregion
+    #region Help Content MGMT
         function New-DarkHelpFile{
             param(
                 [String]$SourceFile
@@ -302,7 +513,7 @@
                 return @(Get-Module -Name $ModuleName | Where { $_.Path -eq $ModulePath })
             }
             #>
-            #etpImport-Module -ModuleName 
+            #Import-DarkModule -ModuleName 
             #$ModuleInfo = Get-Module $Module -ListAvailable
             <#    
             if($null -ne $ModuleInfo){
@@ -379,11 +590,52 @@
             throw "Not implemented."
         }
     #endregion
-#endregion
-#region Module Events
-    <#
-    $ExecutionContext.SessionState.Module.OnRemove = {
+    function Archive-Results{
+        param(
+            [String]$Timestamp=(Get-Date).ToString("yyyyMMddHHmmss"),
+            [String]$RootDirectory,
+            [Hashtable]$IncludedContent,
+            [Switch]$TestMode
+        )
+        $Success=$false
+        $ReturnValue=$null
+        try{
+            $LRFileSuffix="LAST_RUN"
+            $InstanceDirectory=Join-Path $RootDirectory $Timestamp
+            if(-Not (Test-Path $InstanceDirectory)){
+                New-Item -Path $InstanceDirectory -ItemType Directory -Force:$true -Confirm:$false | Out-Null
+            }
+            $ReturnValue=$InstanceDirectory
 
+            $IncludedContent.Keys | %{
+
+                $ItemName  = $_
+                $ItemValue = $IncludedContent[$_]
+                
+                $FileName_LR=Join-Path $RootDirectory     ("{0}_{1}" -f $(if($TestMode){ "TEST_$($ItemName)" } else { $ItemName }), $LRFileSuffix)
+                $FileName_TS=Join-Path $InstanceDirectory ("{0}_{1}" -f $(if($TestMode){ "TEST_$($ItemName)" } else { $ItemName }), $TargetGroupName.Replace(" ", "").Replace("_", ""))
+                
+                #    $CurrentValue=$DICT_ClassifierValues[$_]
+                #    if(($null -ne $CurrentValue) -and $CurrentValue.Count -gt 0){
+                #        #if(-Not $script:TestMode){
+                #            # Overwrite the "LAST_RUN" file
+                #            $CurrentValue | ConvertTo-Json -Depth 3 -Compress | Out-File ("{0}.{1}" -f $FileName_LR, 'json') -Encoding utf8 -Force:$true -Confirm:$false -WhatIf:($script:TestMode) #| Out-Null 
+                #            #$CurrentValue | Export-Csv ("{0}.{1}" -f $FileName_LR, 'csv') -NoClobber -NoTypeInformation -Encoding ascii -Force:$true -Confirm:$false -WhatIf:($script:TestMode) | Out-Null 
+                #        #}
+                #        # Save results to a datestamped folder
+                #        $CurrentValue | ConvertTo-Json -Depth 3 -Compress | Out-File ("{0}.{1}" -f $FileName_TS, 'json') -Encoding utf8 -Force:$true -Confirm:$false | Out-Null
+                #        $CurrentValue | Export-Csv ("{0}.{1}" -f $FileName_TS, 'csv') -NoClobber -NoTypeInformation -Encoding utf8 -Force:$true -Confirm:$false | Out-Null 
+                #    }
+                #    $Success=$true
+
+                $Success = $true
+
+            }
+        } catch {
+            $Success = $false
+            Write-Error $_
+        }
+        return $Success    
+        #return $ReturnValue
     }
-    #>
 #endregion
