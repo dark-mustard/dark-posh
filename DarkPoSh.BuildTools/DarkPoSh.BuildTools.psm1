@@ -72,6 +72,161 @@
         function New-EncryptionCert{
             throw "Not implemented. [Get-EncryptionCert]"
         }
+        function New-SelfSignedDocCert{
+            param()
+            # https://4sysops.com/archives/create-a-certificate-request-file-with-alias-support-using-a-powershell-script/
+            # https://docs.microsoft.com/en-us/powershell/module/microsoft.powershell.security/protect-cmsmessage?view=powershell-7.2#examples
+            #$User                = $env:username
+            $User                = ([ADSI]"LDAP://<SID=$([System.Security.Principal.WindowsIdentity]::GetCurrent().User.Value)>").UserPrincipalName
+            #-------------
+            $KeyLength           = 3072
+            $HashAlgorithm       = 'Sha256'
+            $ValidityPeriod      = 'Years'
+            $ValidityPeriodUnits = "1000"
+            #-------------
+            $TimeStamp           = Get-Date
+            $TimeStampString     = $TimeStamp.ToString("yyyyMMddHHmmss")
+            #-------------
+            #$TMPFileName         = [System.IO.Path]::GetTempFileName()
+            $WorkingDirectory    = "{0}\etp\auth\{1}" -f $env:tmp, $TimeStampString
+            $FileNameBase        = "DocCert_{0}_{1}" -f $User, $TimeStampString
+            $InfoFileName        = "{0}.inf" -f $FileNameBase
+            $CertFileName        = "{0}.cer" -f $FileNameBase
+        
+        
+            #$ValidStartTime
+            #$ExpirationTime
+        
+            #Write-Host "Working Directory:  [$WorkingDirectory]"
+            #------------------------------------------
+            if(-Not (Test-Path -Path $WorkingDirectory)){
+                New-Item -ItemType Directory -Path $WorkingDirectory
+            }
+            Push-Location $WorkingDirectory
+        
+            try{
+                New-SelfSignedCertificate -Type DocumentEncryptionCert -Subject "cn=$User" -HashAlgorithm $HashAlgorithm -KeyLength $KeyLength -NotBefore $ValidStartTime -NotAfter $ExpirationTime
+                #region The shitty way
+                        <#
+                        $CertInfoFileContents = @'
+        [Version]
+        Signature = '$Windows NT$'
+        
+        [Strings]
+        szOID_ENHANCED_KEY_USAGE = '2.5.29.37'
+        szOID_DOCUMENT_ENCRYPTION = '1.3.6.1.4.1.311.80.1'
+        
+        [NewRequest]
+        Subject = 'cn=$UserPrincipalName'
+        MachineKeySet = false
+        KeyLength = $KeyLength
+        KeySpec = AT_KEYEXCHANGE
+        HashAlgorithm = $HashAlgorithm
+        Exportable = true
+        RequestType = Cert
+        KeyUsage = 'CERT_KEY_ENCIPHERMENT_KEY_USAGE | CERT_DATA_ENCIPHERMENT_KEY_USAGE'
+        ValidityPeriod = $ValidityPeriod
+        ValidityPeriodUnits = $ValidityPeriodUnits
+        
+        [Extensions]
+        %szOID_ENHANCED_KEY_USAGE% = "{text}%szOID_DOCUMENT_ENCRYPTION%"
+        '@
+        
+                        $CertInfoFileContents | Out-File -FilePath $InfoFileName
+        
+                        # After you have created your certificate file, run the following command to add
+                        # the certificate file to the certificate store. Now you are ready to encrypt and
+                        # decrypt content with the next two examples.  
+        & certreq.exe -new $InfoFileName $CertFileName
+                #>
+                #endregion
+                #region Domain Certificate Way...
+                    <#
+                    hidden [System.String] GetEncryptionCert() {
+                        $CertDNSName = "$($env:COMPUTERNAME)"
+                        $CertPath = "Cert:\CurrentUser\My"
+                        $CertSubject = $null
+                        $Cert = (Get-Childitem -Path $CertPath | Select Thumbprint,SerialNumber,Subject,NotAfter,NotBefore,EnhancedKeyUsageList) | Where { (($_.EnhancedKeyUsageList | Select FriendlyName).FriendlyName) -contains "Document Encryption" }
+                        $CertSubject = $Cert.Subject
+                        if (-Not $Cert) {
+                            if((Get-WMIObject win32_operatingsystem).Name -like '*Windows Server 2012*') {
+                                #region Generate certificate
+                                    $ExtensionsToAdd = @()
+                                    # Get Subject
+                                        $filter="(&(objectCategory=computer)(objectClass=computer)(cn=$($env:COMPUTERNAME)))"
+                                        $Subject = ([adsisearcher]$filter).FindOne().Properties.distinguishedname
+                                        $SubjectDN = New-Object -ComObject X509Enrollment.CX500DistinguishedName
+                                        $SubjectDN.Encode($Subject, 0x0)
+                                    # Get Enhanced Key Usage
+                                        $OIDs = New-Object -ComObject X509Enrollment.CObjectIDs
+                                        $OID = New-Object -ComObject X509Enrollment.CObjectID
+                                        $OID.InitializeFromValue("Document Encryption")
+                                        # http://msdn.microsoft.com/en-us/library/aa376785(VS.85).aspx
+                                        $OIDs.Add($OID)
+                                        $EKU = New-Object -ComObject X509Enrollment.CX509ExtensionEnhancedKeyUsage
+                                        $EKU.InitializeEncode($OIDs)
+                                        $ExtensionsToAdd += "EKU"
+                                    # Get Key Usage
+                                        $KU = New-Object -ComObject X509Enrollment.CX509ExtensionKeyUsage
+                                        $KU.InitializeEncode([int]([Security.Cryptography.X509Certificates.X509KeyUsageFlags]"KeyEncipherment,DataEncipherment,KeyAgreement"))
+                                        $KU.Critical = $true
+                                        $ExtensionsToAdd += "KU"
+                                    # Generate Private Key
+                                        # http://msdn.microsoft.com/en-us/library/aa378921(VS.85).aspx
+                                        $PrivateKey = New-Object -ComObject X509Enrollment.CX509PrivateKey
+                                        $PrivateKey.ProviderName = "Microsoft Enhanced Cryptographic Provider v1.0"
+                                        $AlgID = New-Object -ComObject X509Enrollment.CObjectId
+                                        $AlgID.InitializeFromValue(([Security.Cryptography.Oid]"RSA").Value)
+                                        $PrivateKey.Algorithm = $AlgID
+                                        # http://msdn.microsoft.com/en-us/library/aa379409(VS.85).aspx
+                                        $PrivateKey.KeySpec = 1
+                                        $PrivateKey.Length = 2048
+                                        # key will be stored in current user certificate store
+                                        $PrivateKey.MachineContext = $false
+                                        $PrivateKey.ExportPolicy = 0
+                                        $PrivateKey.Create()
+                                    # Create Certificate
+                                        # http://msdn.microsoft.com/en-us/library/aa377124(VS.85).aspx
+                                        $CertReq = New-Object -ComObject X509Enrollment.CX509CertificateRequestCertificate
+                                        $CertReq.InitializeFromPrivateKey(0x1,$PrivateKey,"")
+                                        $CertReq.Subject = $SubjectDN
+                                        $CertReq.Issuer = $CertReq.Subject
+                                        $CertReq.NotBefore = [DateTime]::Now.AddDays(-1)
+                                        $CertReq.NotAfter = [DateTime]::Now.AddDays(364)
+                                        foreach ($item in $ExtensionsToAdd) {$CertReq.X509Extensions.Add((Get-Variable -Name $item -ValueOnly))}
+                                        $SigOID = New-Object -ComObject X509Enrollment.CObjectId
+                                        $SigOID.InitializeFromValue(([Security.Cryptography.Oid]"SHA256").Value)
+                                        $CertReq.SignatureInformation.HashAlgorithm = $SigOID
+                                        # completing certificate request template building
+                                        $CertReq.Encode()
+            
+                                        # interface: http://msdn.microsoft.com/en-us/library/aa377809(VS.85).aspx
+                                        $Request = New-Object -ComObject X509Enrollment.CX509enrollment
+                                        $Request.InitializeFromRequest($CertReq)
+                                        $Request.CertificateFriendlyName = ""
+                                        $endCert = $Request.CreateRequest(0x1)
+                                        $Request.InstallResponse(0x2,$endCert,0x1,"")
+                                        [Byte[]]$CertBytes = [Convert]::FromBase64String($endCert)
+                                        $Cert = New-Object Security.Cryptography.X509Certificates.X509Certificate2 @(,$CertBytes)
+                                #endregion
+                                $CertSubject = $Cert.Subject
+                            } else {
+                                $Cert = New-SelfSignedCertificate -DnsName $CertDNSName -CertStoreLocation $CertPath -KeyUsage KeyEncipherment,DataEncipherment,KeyAgreement -Type DocumentEncryptionCert
+                                $CertSubject = $Cert.Subject
+                            }
+                        }
+                        return $Cert.Subject
+                    }
+                    #>
+                #endregion
+            } catch { 
+                $_
+            } finally {
+                Write-Host "Working Directory:  [$WorkingDirectory]"
+                Pop-Location
+            }
+        }
+        
         function New-DarkCertificate{
             [CmdletBinding()]
             param(

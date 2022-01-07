@@ -1123,4 +1123,33 @@
             return $ReturnFileList
         }
     #endregion
+    #region Random...
+        function New-BadASCIIfiedString{
+            [cmdletbinding()]
+            [alias("ConvertTo-BadASCII")]
+            [outputtype([System.String])]
+            param(
+                [Parameter(Position = 0, Mandatory, HelpMessage = "Enter a short string of text to convert", ValueFromPipeline)]
+                [ValidateNotNullOrEmpty()]
+                    [string]$Text,
+                [Parameter(Position = 1,HelpMessage = "Specify a font from https://artii.herokuapp.com/fonts_list. Font names are case-sensitive")]
+                [ValidateNotNullOrEmpty()]
+                    [string]$Font = $null
+            )
+            $APIHost = "https://artii.herokuapp.com"
+        
+            if([String]::IsNullOrWhiteSpace($Font)){
+                $FontList        = @($(Invoke-RestMethod "$APIHost/fonts_list").Split([Environment]::NewLine))
+                $RandomFontIndex = Get-Random -Maximum ($FontList.Count -1)
+                $Font            = $FontList[$RandomFontIndex]
+            }
+        
+            $EncodedText  = [uri]::EscapeDataString($Text)
+            $APIMethodUrl = "$APIHost/make?text=$EncodedText&font=$Font"
+        
+            $BadASCIIFiedText = Invoke-Restmethod -Uri $APIMethodUrl -DisableKeepAlive -ErrorAction Stop
+            
+            return $BadASCIIFiedText
+        }
+    #endregion
 #endregion
