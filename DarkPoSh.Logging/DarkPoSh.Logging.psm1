@@ -1126,7 +1126,7 @@
     #region Random...
         function New-BadASCIIfiedString{
             [cmdletbinding()]
-            [alias("ConvertTo-BadASCII")]
+            [alias("ConvertTo-ASCIIArt")]
             [outputtype([System.String])]
             param(
                 [Parameter(Position = 0, Mandatory, HelpMessage = "Enter a short string of text to convert", ValueFromPipeline)]
